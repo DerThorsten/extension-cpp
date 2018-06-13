@@ -1,4 +1,4 @@
 from torch.utils.cpp_extension import load
-lltm_cuda = load(
-    'lltm_cuda', ['lltm_cuda.cpp', 'lltm_cuda_kernel.cu'], verbose=True)
-help(lltm_cuda)
+spacc_cuda = load(
+    'spacc_cuda', ['spacc_cuda.cpp', 'spacc_cuda_kernel.cu'], verbose=True)
+help(spacc_cuda)

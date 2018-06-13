@@ -5,6 +5,7 @@ setup(
     name='lltm_cpp',
     ext_modules=[
         CppExtension('lltm_cpp', ['lltm.cpp']),
+        CppExtension('spacc_cpp', ['spacc.cpp']),
     ],
     cmdclass={
         'build_ext': BuildExtension

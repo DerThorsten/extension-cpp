@@ -22,6 +22,15 @@ std::vector<at::Tensor> lltm_cuda_backward(
     at::Tensor gate_weights,
     at::Tensor weights);
 
+
+
+
+
+
+
+
+
+
 // C++ interface
 
 #define CHECK_CUDA(x) AT_ASSERT(x.type().is_cuda(), #x " must be a CUDA tensor")
