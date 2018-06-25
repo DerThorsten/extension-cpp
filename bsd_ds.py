@@ -247,7 +247,7 @@ class Bsd500Sp(Dataset):
             sp = numpy.require(sp, dtype='uint32')
             sp = vigra.analysis.labelImage(sp)
         else:
-            sp = bsd_sp(img_raw_big, pmap, n_sp = 1300, tt_augment=tt_augment,train=self.split=='train')
+            sp = bsd_sp(img_raw_big, pmap, n_sp = 1000, tt_augment=tt_augment,train=self.split=='train')
         sp = numpy.require(sp.view(numpy.ndarray), requirements=['C'])
       
         # assert sp.shape == small_shape

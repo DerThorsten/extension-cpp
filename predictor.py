@@ -326,7 +326,7 @@ class Predictor(object):
 
       
     def predict_lmc(self, index):
-        res_odict, backward_mapping, cell1_preds, cell0_3_preds, lifted_preds = self.predict_sp_augmented(index)
+        res_odict, backward_mapping, cell1_preds, cell0_3_preds, lifted_preds = self.predict_augmented(index)
    
         cell_1_bounds   = res_odict["cell_1_bounds"]
         sp              = res_odict["sp"]
@@ -337,8 +337,10 @@ class Predictor(object):
         gt_stack        = res_odict["gt_stack"]
 
         lifted_edges     = maybe_detach(res_odict['lifted_edges'])
-        lifted_distances = maybe_detach(res_odict['lifted_distances'])
-
+        try:
+            lifted_distances = maybe_detach(res_odict['lifted_distances'])
+        except:
+            lifted_distances = None
 
 
 
@@ -448,7 +450,8 @@ class Predictor(object):
         w_lifted /= w_lifted.shape[0]
         w_lifted *= 3.0
         
-        w_lifted /= (lifted_distances.astype('float') + 1.0)**2
+        if lifted_distances is not None:
+            w_lifted /= (lifted_distances.astype('float') + 1.0)**2
 
 
 

@@ -61,7 +61,7 @@ def main():
     # Fill these in:
     LOG_DIRECTORY = '/home/tbeier/src/extension-cpp/log/'
     SAVE_DIRECTORY = '/home/tbeier/src/extension-cpp/savedir/'
-    RES_DIRECTORY = '/home/tbeier/src/extension-cpp/res_newtrain/'
+    RES_DIRECTORY = '/home/tbeier/src/extension-cpp/res_newtrain2/'
     USE_CUDA = bool(1)
 
     # Device configuration

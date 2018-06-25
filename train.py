@@ -101,7 +101,7 @@ if __name__ == '__main__':
 
     model = ConvNet()#.double()
 
-    smoothness = 0.99
+    smoothness = 0.001
     trainer = Trainer(model)
 
 
@@ -109,12 +109,12 @@ if __name__ == '__main__':
     trainer.build_criterion(LossWrapper)
     trainer.build_criterion(LossWrapper)
     trainer.build_optimizer('Adam')
-    trainer.validate_every((2, 'epochs'))
-    trainer.save_every((2, 'epochs'))
+    trainer.validate_every((1, 'epochs'))
+    #trainer.save_every((4, 'epochs'))
     trainer.save_to_directory(SAVE_DIRECTORY)
     trainer.set_max_num_epochs(10000) 
     trainer.register_callback(SaveAtBestValidationScore(smoothness=smoothness, verbose=True))
-    trainer.register_callback(AutoLR(factor=0.99,
+    trainer.register_callback(AutoLR(factor=0.5,
                                   patience='1 epochs',
                                   monitor_while='validating',
                                   monitor='validation_loss',
