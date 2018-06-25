@@ -22,8 +22,10 @@ import numpy
 import nifty.cgp
 import nifty.segmentation
 import nifty.ground_truth
-
 from inferno.extensions.layers.convolutional import *
+from inferno.trainers.callbacks.scheduling import AutoLR
+from inferno.trainers.callbacks.essentials import SaveAtBestValidationScore
+from inferno.trainers.callbacks.tqdm import TQDMProgressBar
 
 from model import *
 from bsd_ds import *
@@ -31,60 +33,16 @@ from bsd_ds import *
 from predictor import * 
 
 
+import warnings
+from inferno.trainers.callbacks.scheduling import AutoLR
+warnings.filterwarnings("ignore")
+
+
 if __name__ == '__main__':
 
 
-    class LossWrapper(nn.Module):
-        def __init__(self):
-            super(LossWrapper, self).__init__()
-            #self.loss = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.5, 2.0]), reduce=False)
-            self.loss = torch.nn.BCELoss(reduce=False)
-            self.loss2 = torch.nn.BCELoss(reduce=False)
-
-        def forward(self,thepred, all_gt):
-            cell_1_prediction, j3pred, j4pred = thepred
-            gt, sizes, cell0_3_gt, cell0_4_gt = all_gt
-            cell_1_prediction = torch.squeeze(cell_1_prediction)
-
-            cell0_3_gt = torch.squeeze(cell0_3_gt)
-            cell0_4_gt = torch.squeeze(cell0_4_gt)
-
-            gt = torch.squeeze(gt)
-            w = (gt + 1)**2.75
-            sizes = torch.squeeze(sizes.float())
-            #print('it', cell_1_prediction.size(), cell_1_gt.size())
-            
-            l =  self.loss(cell_1_prediction, gt)
-            l = l * w
-            l = torch.sum(l * sizes) / torch.sum(sizes)
 
 
-            theloss3 = self.loss2(j3pred, cell0_3_gt)
-
-            l30 = theloss3[:,0] * (1.0 + cell0_3_gt[:,0])*2.75
-            l31 = theloss3[:,1] * (1.0 + cell0_3_gt[:,1])*2.75
-            l32 = theloss3[:,2] * (1.0 + cell0_3_gt[:,2])*2.75
-
-            theloss3 = torch.sum(l30 + l31 + l32) / (3.0*cell0_3_gt.size(0))
-
-
-
-            theloss4 = self.loss2(j4pred, cell0_4_gt)
-            theloss4 = self.loss2(j4pred, cell0_4_gt)
-
-            l40 = theloss4[:,0] * (1.0 + cell0_4_gt[:,0])*2.75
-            l41 = theloss4[:,1] * (1.0 + cell0_4_gt[:,1])*2.75
-            l42 = theloss4[:,2] * (1.0 + cell0_4_gt[:,2])*2.75
-            l43 = theloss4[:,3] * (1.0 + cell0_4_gt[:,3])*2.75
-
-            theloss4= torch.sum(l40 + l41 + l42 + l43) / (4.0*cell0_4_gt.size(0))
-            print()
-
-            lsum  = l + 0.3*theloss3 + 0.1*theloss4
-
-            print("THELOSS: ",float(lsum.item()))
-            print("     c1",float(l.item()), "c0_3",float(theloss3.item()), "c0_4",float(theloss4.item()))
-            return lsum
     import torch.nn as nn
     from inferno.io.box.cifar import get_cifar10_loaders
     from inferno.trainers.basic import Trainer
@@ -93,8 +51,8 @@ if __name__ == '__main__':
     from inferno.extensions.layers.reshape import Flatten
 
     # Fill these in:
-    LOG_DIRECTORY = '/home/tbeier/src/extension-cpp/log/'
-    SAVE_DIRECTORY = '/home/tbeier/src/extension-cpp/savedir/'
+    LOG_DIRECTORY = '/home/tbeier/src/extension-cpp/log_new/'
+    SAVE_DIRECTORY = '/home/tbeier/src/extension-cpp/savedir_new/'
 
     USE_CUDA = bool(1)
 
@@ -118,9 +76,8 @@ if __name__ == '__main__':
     joint_transformation = trafo.Compose(
         #trafo.image.ElasticTransform(1,1),
         trafo.image.RandomRotate(),
-        # trafo.image.RandomTranspose(),
-        # trafo.image.RandomFlip(),
-
+        trafo.image.RandomTranspose(),
+        trafo.image.RandomFlip()
     )
 
 
@@ -140,36 +97,47 @@ if __name__ == '__main__':
         bsd_root=bsd_root, 
         pmap_root=pmap_root,
         split='val', 
-        joint_transformation=None)
+        joint_transformation=joint_transformation)
 
     model = ConvNet()#.double()
 
-    #model.double()
-    # Build trainer
-    trainer = Trainer(model) \
-        .build_criterion(LossWrapper) \
-        .build_criterion(LossWrapper) \
-        .build_optimizer('Adam') \
-        .validate_every((4, 'epochs')) \
-        .save_every((4, 'epochs')) \
-        .save_to_directory(SAVE_DIRECTORY) \
-        .set_max_num_epochs(100) \
-        # .build_logger(TensorboardLogger(log_scalars_every='never',
-        #                             log_images_every='never'), 
-        #           log_directory=LOG_DIRECTORY)
+    smoothness = 0.99
+    trainer = Trainer(model)
+
+
+
+    trainer.build_criterion(LossWrapper)
+    trainer.build_criterion(LossWrapper)
+    trainer.build_optimizer('Adam')
+    trainer.validate_every((2, 'epochs'))
+    trainer.save_every((2, 'epochs'))
+    trainer.save_to_directory(SAVE_DIRECTORY)
+    trainer.set_max_num_epochs(10000) 
+    trainer.register_callback(SaveAtBestValidationScore(smoothness=smoothness, verbose=True))
+    trainer.register_callback(AutoLR(factor=0.99,
+                                  patience='1 epochs',
+                                  monitor_while='validating',
+                                  monitor='validation_loss',
+                                  monitor_momentum=smoothness,
+                                  consider_improvement_with_respect_to='previous',
+                                  verbose=True))
+
+    trainer.register_callback(TQDMProgressBar())
+
+
     
     # Bind loaders
-    train_loader = torch.utils.data.DataLoader(dataset=bsd_train, num_workers=1)
-    val_loader = torch.utils.data.DataLoader(dataset=bsd_val, num_workers=0)
+    train_loader = torch.utils.data.DataLoader(dataset=bsd_train, num_workers=8)
+    val_loader = torch.utils.data.DataLoader(dataset=bsd_val, num_workers=8)
 
     num_inputs = bsd_train.num_inputs()
     num_targets = bsd_train.num_targets()
-    
-    trainer \
+    trainer\
       .bind_loader('train',    train_loader, num_inputs=num_inputs, num_targets=num_targets) \
       .bind_loader('validate', val_loader,   num_inputs=num_inputs, num_targets=num_targets) \
 
 
 
     trainer.cuda()
+    #Etrainer.load()
     trainer.fit()

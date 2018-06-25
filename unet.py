@@ -68,7 +68,7 @@ class DenseBlock(nn.Module):
         return input
 
 class UnetBase(nn.Module):
-    def __init__(self, in_channels, out_channels=None, depth=3, gain=2, residual=False):
+    def __init__(self, in_channels, out_channels=None, depth=3, gain=2, residual=False, p_dropout=0.1):
 
         super(UnetBase, self).__init__()
         self.in_channels = in_channels
@@ -79,7 +79,7 @@ class UnetBase(nn.Module):
         if self.out_channels is None:
             self.out_channels = self.in_channels * gain
 
-
+        self.dropout = torch.nn.Dropout2d(p=p_dropout)
 
         conv_in_channels  = in_channels
         # convolution block downwards
@@ -150,7 +150,9 @@ class UnetBase(nn.Module):
         # downwards
         for d in range(self.depth):
 
+
             res = self.conv_down_ops[d](input)
+            #res = self.dropout(res)
             down_res.append(res)
             input = self.downsample_ops[d](res)
         
@@ -175,6 +177,8 @@ class UnetBase(nn.Module):
 
             # conv
             input = self.conv_up_ops[d](input)
+            #if d + 1 != self.depth:
+            #    input = self.dropout(input)
 
         assert input.size(1) == self.out_channels
         return input 

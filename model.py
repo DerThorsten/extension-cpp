@@ -30,9 +30,79 @@ from unet import *
 from cpp.spacc import *
 
 
+class LossWrapper(nn.Module):
+    def __init__(self):
+        super(LossWrapper, self).__init__()
+        #self.loss = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.5, 2.0]), reduce=False)
+        self.cell1_loss = torch.nn.BCELoss(reduce=False)
+        self.lifted_loss = torch.nn.BCELoss(reduce=False)
+     
+
+        self.cell0_3_loss = torch.nn.CrossEntropyLoss(reduce=False)
+        if False:
+            self.cell0_4_loss = torch.nn.CrossEntropyLoss(reduce=False)
+
+    def forward(self,thepred, all_gt):
+        cell_1_prediction, j3pred, lifted_pred = thepred
+        #cell_1_prediction, j3pred = thepred
+        cell_1_gt, cell_1_lw, cell_0_3_gt, cell_0_3_lw, lifted_edge_gt, lifted_edge_loss_weight = all_gt
+        
+        cell_1_prediction = torch.squeeze(cell_1_prediction)
+        lifted_pred = torch.squeeze(lifted_pred)
+        lifted_edge_gt = torch.squeeze(lifted_edge_gt)
+        cell_1_gt = torch.squeeze(cell_1_gt)
+        cell_1_lw = torch.squeeze(cell_1_lw)
+        cell_0_3_gt = torch.squeeze(cell_0_3_gt)
+        #cell_0_4_gt = torch.squeeze(cell_0_4_gt)
+        cell_0_3_lw = torch.squeeze(cell_0_3_lw)
+        lifted_edge_loss_weight = torch.squeeze(lifted_edge_loss_weight)
+        #cell_0_4_lw = torch.squeeze(cell_0_4_lw)
+
+        ############################
+        # CELL 1 / BOUNDARY LOSS
+        ############################
+        lc1 =  self.cell1_loss(cell_1_prediction, cell_1_gt)
+        lc1 = torch.sum(lc1 * cell_1_lw)/cell_1_prediction.size(0)
+
+
+        ############################
+        # LIFTED EDGE LOSS
+        ############################
+        #tmp = lifted_pred.cpu().detach().numpy()
+        #gt = lifted_edge_gt.cpu().detach().numpy()
+        #print("lifted_pred",tmp.min(),tmp.max())
+        #print("gt",gt.min(),gt.max())
+        if True:
+            ll =  self.lifted_loss(lifted_pred, lifted_edge_gt)
+            ll = torch.sum(ll * lifted_edge_loss_weight)/lifted_pred.size(0)
+
+
+
+        ############################
+        # CELL0 3/ J3 LOSS
+        ############################
+    
+        lc03 =  self.cell0_3_loss(j3pred, cell_0_3_gt)
+        lc03 = torch.sum(lc03 * cell_0_3_lw)/cell_0_3_lw.size(0)
+
+        ############################
+        # CELL0 4/ J4 LOSS
+        ############################
+        #print("j4pred",j4pred.size(), "lw",cell_0_4_lw.size())
+        #lc04 =  self.cell0_4_loss(j4pred, cell_0_4_gt)
+        #lc04 = torch.sum(lc04 * cell_0_4_lw)/cell_0_4_lw.size(0)
+
+        ############################
+        # Total LOSS
+        ############################
+        total_loss = lc1 + 0.01*lc03 + 0.01*ll
+        #print("THELOSS: ",float(total_loss.item()))
+        #print("     c1",float(lc1.item()), "c0_3",float(lc03.item()) , "ll",float(ll.item()))
+
+        return total_loss
 
 class MyNN(nn.Module):
-    def __init__(self, in_channels, out_channels=None, hidden_gain=2, activated=True):
+    def __init__(self, in_channels, out_channels=None, hidden_gain=2, activated=True,p=0.2):
         super(MyNN, self).__init__()
 
         self.activated = activated
@@ -42,8 +112,9 @@ class MyNN(nn.Module):
             self.out_channels = in_channels
         self.hidden_gain = hidden_gain
 
-      
+        
         self.hidden_1 = nn.Linear(in_channels,     in_channels * hidden_gain)
+        #self.dropout  = nn.Dropout(p=p)
         self.hidden_2 = nn.Linear(in_channels * hidden_gain, self.out_channels)
     
         self.nl = nn.ELU()
@@ -52,15 +123,16 @@ class MyNN(nn.Module):
         assert input.size(1) == self.in_channels
         out = self.hidden_1(input)
         out = self.nl(out)
+        #out = self.dropout(out)
         out = self.hidden_2(out)
         if self.activated:
             out  = self.nl(out)
         assert out.size(1) == self.out_channels
         return out
 
-class EdgeLinear(nn.Module):
+class EdgeFeatNodeFeatModule(nn.Module):
     def __init__(self, in_channels_e, in_channels_uv):
-        super(EdgeLinear, self).__init__()
+        super(EdgeFeatNodeFeatModule, self).__init__()
 
         n_in = in_channels_e + 2*in_channels_uv
         n_hidden = n_in * 2 
@@ -105,6 +177,48 @@ class EdgeLinear(nn.Module):
 
 
 
+class LiftedEdgeModule(nn.Module):
+    def __init__(self, in_channels_uv):
+        super(LiftedEdgeModule, self).__init__()
+
+        n_in = 2*in_channels_uv
+        n_hidden = n_in #* 2 
+
+        # self.n_jpool_in = n_hidden
+        #self.n_jpool_out  = 3 * self*n_jpool_in
+        #self.n_jpool_bn   = 5
+
+        self.in_channels_uv = in_channels_uv
+        self.out_channels = n_hidden 
+        self.hidden_1 = nn.Linear(n_in,         n_hidden)
+        self.hidden_2 = nn.Linear(n_hidden,     n_hidden)
+        self.nl       = nn.ELU()
+
+        #self.j_pooled_bn = nn.Linear(n_in,     n_hidden)
+
+        #self.j_pool = JunctionPoolModule()
+        #self.n_in = n_in
+    def forward(self, f_eu, f_ev):
+        #print("insize",f_eu.size(1),"should ",self.in_channels_uv)
+        #print("insize",f_ev.size(1),"should ",self.in_channels_uv)
+        assert f_eu.size(1) == self.in_channels_uv
+        assert f_ev.size(1) == self.in_channels_uv
+
+        a = torch.cat([f_eu, f_ev], 1)
+        b = torch.cat([f_ev, f_eu], 1)
+        a = self.hidden_1(a)
+        b = self.hidden_1(b)
+        a = self.nl(a)
+        b = self.nl(b)
+        a = self.hidden_2(a)
+        b = self.hidden_2(b)
+        a = self.nl(a)
+        b = self.nl(b)
+
+        res = a + b
+        #res = self.nl(res)
+        assert res.size(1) == self.out_channels
+        return res
 
 
 
@@ -168,7 +282,7 @@ class ExtractFromJ(nn.Module):
 
 
 class BatchJunctionModule(nn.Module):
-    def __init__(self, jsize, per_cell1_channels=4, depth=3, unet_depth=3, gain=2):
+    def __init__(self, jsize, per_cell1_channels=4, depth=3, unet_depth=3, gain=2, p=0.15):
 
 
         super(BatchJunctionModule, self).__init__()
@@ -176,7 +290,7 @@ class BatchJunctionModule(nn.Module):
         self.jsize = jsize   
 
         self.max_pool = nn.MaxPool2d(kernel_size=2, stride=2) 
-
+        #self.dropout = nn.Dropout2d(p=p)
         conv_blocks = []
         extract_blocks = []
         in_channels = 5+self.jsize
@@ -191,8 +305,8 @@ class BatchJunctionModule(nn.Module):
             else:
                 out_channels = in_channels * gain
 
+            #conv_block = DenseBlock(in_channels=in_channels, out_channels=out_channels, size=4, out_per_conv=3)
             conv_block = DenseBlock(in_channels=in_channels, out_channels=out_channels)
-
             in_channels = out_channels
 
 
@@ -253,7 +367,7 @@ class BatchJunctionModule(nn.Module):
             
 
             conv_res = self.conv_blocks[i](current_input)
-
+            #conv_res = self.dropout(conv_res)
 
             # extract features
             eres = self.extract_blocks[i](conv_res, current_masks)
@@ -287,9 +401,9 @@ class ConvNet(nn.Module):
         # self.layer2 = BNReLUConv2D(kernel_size=3, in_channels=10, out_channels=10)
         # self.layer3 = ConvELU2D(kernel_size=3,    in_channels=10, out_channels=10)
         
-        self.unet    = DenseBlockUnet(in_channels=5)
+        self.unet    = ResBlockUnet(in_channels=5)
 
-
+        #self.dropout = nn.Dropout2d(p=0.2)
 
         self.acc = Cell12AccModule(in_channels=self.unet.out_channels)
 
@@ -297,36 +411,36 @@ class ConvNet(nn.Module):
         self.nn_cell_2  = MyNN(in_channels=self.acc.out_channels)
 
       
-        self.edge_hidden = EdgeLinear(self.acc.out_channels, self.acc.out_channels)
+        self.edge_hidden = EdgeFeatNodeFeatModule(self.acc.out_channels, self.acc.out_channels)
+        self.lifted_edges_op = LiftedEdgeModule(self.acc.out_channels)
+
+        self.lifted_edge_pred = MyNN(in_channels=self.lifted_edges_op.out_channels,
+                              out_channels=1, activated=False)
 
         self.hidden_3    = nn.Linear(self.edge_hidden.out_channels, 1)
 
         self.sigmoid     = nn.Sigmoid()
-
+        self.softmax     = nn.Softmax(dim=1)
 
         self.j_pool    = JunctionPoolModule()
         self.j_pool_nn = MyNN(in_channels=2*self.edge_hidden.out_channels,
                               out_channels=self.edge_hidden.out_channels)
 
 
-
-        self.j4 = BatchJunctionModule(jsize=4)
         self.j3 = BatchJunctionModule(jsize=3)
         
-        self.nn_j3  = MyNN(in_channels=(self.j3.n_cell_0_feat_out + self.edge_hidden.out_channels + 1)*3, out_channels=3, activated=False)
-        self.nn_j4  = MyNN(in_channels=(self.j4.n_cell_0_feat_out + self.edge_hidden.out_channels + 1)*4, out_channels=4, activated=False)
-
+        self.nn_j3  = MyNN(in_channels=(self.j3.n_cell_0_feat_out + self.edge_hidden.out_channels + 1)*3, out_channels= 5, activated=False)
 
 
     def forward(self, padded_image,  padded_cell_masks, 
                 cell_0_bounds, cell_1_bounds, 
                 cell_1_sizes, cell_2_sizes,
-                cell0_3_bounds, cell0_4_bounds,
-                c03, c04, fc03, fc04):
+                cell0_3_bounds, c03, fc03,
+                lifted_edges):
 
-
+        lifted_edges = torch.squeeze(lifted_edges)
         cell0_3_bounds = torch.squeeze(cell0_3_bounds)-1
-        cell0_4_bounds = torch.squeeze(cell0_4_bounds)-1
+
 
 
         padded_mask_1 = padded_cell_masks[:,1,...]
@@ -338,6 +452,7 @@ class ConvNet(nn.Module):
         is_boundary = torch.clamp(padded_mask_1, min=0, max=1).float() - 0.5
 
         input = torch.cat([padded_image, torch.unsqueeze(is_boundary, 0)], 1)
+        #input = self.dropout(input)
 
         out = self.unet(input)
 
@@ -352,7 +467,7 @@ class ConvNet(nn.Module):
         cell_1_features_new = self.nn_cell_1(cell_1_features) + cell_1_features
         cell_2_features_new = self.nn_cell_2(cell_2_features) + cell_2_features
 
-
+            
 
 
 
@@ -366,18 +481,32 @@ class ConvNet(nn.Module):
         u = cell_1_bounds[:,0] - 1
         v = cell_1_bounds[:,1] - 1
 
+
+
         cell_2_features_u = cell_2_features_new[u, :]
         cell_2_features_v = cell_2_features_new[v, :]
-     
+
+        if True:
+
+            lu = lifted_edges[:,0] - 1
+            lv = lifted_edges[:,1] - 1
+            cell_2_features_lu = cell_2_features_new[lu, :]
+            cell_2_features_lv = cell_2_features_new[lv, :]
+            lifted_feat = self.lifted_edges_op(cell_2_features_lu, cell_2_features_lv)
+            lifted_pred = self.lifted_edge_pred(lifted_feat)
+            lifted_pred = self.sigmoid(lifted_pred)
+
 
         out = self.edge_hidden(cell_1_features_new, cell_2_features_u, cell_2_features_v, torch.squeeze(cell_0_bounds))
+        
+        if False:
+            jpool = self.j_pool(out, cell_0_bounds.squeeze())
+            jpool = jpool.view(out.size(0),-1)
+            cell_1_feat = self.j_pool_nn(jpool) + out
+        else:
+            cell_1_feat = out
 
 
-        jpool = self.j_pool(out, cell_0_bounds.squeeze())
-        jpool = jpool.view(out.size(0),-1)
-    
-
-        cell_1_feat = self.j_pool_nn(jpool) + out
         cell_1_pred = self.hidden_3(cell_1_feat)
         cell_1_pred = self.sigmoid(cell_1_pred)
 
@@ -392,28 +521,9 @@ class ConvNet(nn.Module):
         p31 =cell_1_pred[cell0_3_bounds[:,1],:].unsqueeze(2)
         p32 =cell_1_pred[cell0_3_bounds[:,2],:].unsqueeze(2)
 
-
-
-
-        e40 = cell_1_feat[cell0_4_bounds[:,0],:].unsqueeze(2)
-        e41 = cell_1_feat[cell0_4_bounds[:,1],:].unsqueeze(2)
-        e42 = cell_1_feat[cell0_4_bounds[:,2],:].unsqueeze(2)
-        e43 = cell_1_feat[cell0_4_bounds[:,3],:].unsqueeze(2)
-
-
-
-        p40 = cell_1_pred[cell0_4_bounds[:,0],:].unsqueeze(2)
-        p41 = cell_1_pred[cell0_4_bounds[:,1],:].unsqueeze(2)
-        p42 = cell_1_pred[cell0_4_bounds[:,2],:].unsqueeze(2)
-        p43 = cell_1_pred[cell0_4_bounds[:,3],:].unsqueeze(2)
-
         # |C3| x edge_hidden.out x 3 
         j3_e_feat = torch.cat([e30,e31,e32], 2)
         j3_p_feat = torch.cat([p30,p31,p32], 2)
-
-        # |C4| x edge_hidden.out x 3 
-        j4_e_feat = torch.cat([e40,e41,e42, e43], 2)
-        j4_p_feat = torch.cat([p40,p41,p42, p43], 2)
 
 
 
@@ -429,30 +539,10 @@ class ConvNet(nn.Module):
         j3_feat = j3_feat.view(j3_feat.size(0), -1)
         
 
-        #j4_feat =  |J| x 2*per_cell1_channels x 4
-        j4_feat = self.j4(masks=torch.squeeze(c04), image_data=torch.squeeze(fc04))
-      
-        j4_feat = torch.cat([j4_feat, j4_e_feat, j4_p_feat], 1)
-        #j4_feat =  |J| x  (2*per_cell1_channels  +edge_liear.out_channels) * 4
-        j4_feat = j4_feat.view(j4_feat.size(0), -1)
-
-
-
-
-
-
 
         j3_pred = self.nn_j3(j3_feat)
-        j3_pred = self.sigmoid(j3_pred)
-
-        j4_pred = self.nn_j4(j4_feat)
-        j4_pred = self.sigmoid(j4_pred)
+        j3_pred = self.softmax(j3_pred)
 
 
 
-
-
-
-
-        return cell_1_pred, j3_pred, j4_pred
-
+        return cell_1_pred, j3_pred,lifted_pred
