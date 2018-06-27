@@ -60,8 +60,8 @@ def main():
 
     # Fill these in:
     LOG_DIRECTORY = '/home/tbeier/src/extension-cpp/log/'
-    SAVE_DIRECTORY = '/home/tbeier/src/extension-cpp/savedir/'
-    RES_DIRECTORY = '/home/tbeier/src/extension-cpp/res_newtrain2/'
+    SAVE_DIRECTORY = '/home/tbeier/src/extension-cpp/savedir_new/'
+    RES_DIRECTORY = '/home/tbeier/src/extension-cpp/res_newtrain_realnew/'
     USE_CUDA = bool(1)
 
     # Device configuration
@@ -115,7 +115,7 @@ def main():
 
 
     trainer.cuda()
-    trainer.load()
+    trainer.load(best=True, from_directory=SAVE_DIRECTORY, filename='best_checkpoint.pytorch')
     meval = trainer.model.eval()#.cpu()
 
     #model.load_state_dict(torch.load('savedir/checkpoint.pytorch'))

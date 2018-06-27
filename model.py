@@ -35,29 +35,18 @@ class LossWrapper(nn.Module):
         super(LossWrapper, self).__init__()
         #self.loss = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.5, 2.0]), reduce=False)
         self.cell1_loss = torch.nn.BCELoss(reduce=False)
-        self.lifted_loss = torch.nn.BCELoss(reduce=False)
-     
 
-        self.cell0_3_loss = torch.nn.CrossEntropyLoss(reduce=False)
-        if False:
-            self.cell0_4_loss = torch.nn.CrossEntropyLoss(reduce=False)
 
     def forward(self,thepred, all_gt):
-        cell_1_prediction, j3pred, lifted_pred = thepred
+        cell_1_prediction = thepred
         #cell_1_prediction, j3pred = thepred
-        cell_1_gt, cell_1_lw, cell_0_3_gt, cell_0_3_lw, lifted_edge_gt, lifted_edge_loss_weight = all_gt
+        cell_1_gt, cell_1_lw = all_gt
         
         cell_1_prediction = torch.squeeze(cell_1_prediction)
-        lifted_pred = torch.squeeze(lifted_pred)
-        lifted_edge_gt = torch.squeeze(lifted_edge_gt)
+      
         cell_1_gt = torch.squeeze(cell_1_gt)
         cell_1_lw = torch.squeeze(cell_1_lw)
-        cell_0_3_gt = torch.squeeze(cell_0_3_gt)
-        #cell_0_4_gt = torch.squeeze(cell_0_4_gt)
-        cell_0_3_lw = torch.squeeze(cell_0_3_lw)
-        lifted_edge_loss_weight = torch.squeeze(lifted_edge_loss_weight)
-        #cell_0_4_lw = torch.squeeze(cell_0_4_lw)
-
+        
         ############################
         # CELL 1 / BOUNDARY LOSS
         ############################
@@ -65,41 +54,10 @@ class LossWrapper(nn.Module):
         lc1 = torch.sum(lc1 * cell_1_lw)/cell_1_prediction.size(0)
 
 
-        ############################
-        # LIFTED EDGE LOSS
-        ############################
-        #tmp = lifted_pred.cpu().detach().numpy()
-        #gt = lifted_edge_gt.cpu().detach().numpy()
-        #print("lifted_pred",tmp.min(),tmp.max())
-        #print("gt",gt.min(),gt.max())
-        if True:
-            ll =  self.lifted_loss(lifted_pred, lifted_edge_gt)
-            ll = torch.sum(ll * lifted_edge_loss_weight)/lifted_pred.size(0)
 
 
 
-        ############################
-        # CELL0 3/ J3 LOSS
-        ############################
-    
-        lc03 =  self.cell0_3_loss(j3pred, cell_0_3_gt)
-        lc03 = torch.sum(lc03 * cell_0_3_lw)/cell_0_3_lw.size(0)
-
-        ############################
-        # CELL0 4/ J4 LOSS
-        ############################
-        #print("j4pred",j4pred.size(), "lw",cell_0_4_lw.size())
-        #lc04 =  self.cell0_4_loss(j4pred, cell_0_4_gt)
-        #lc04 = torch.sum(lc04 * cell_0_4_lw)/cell_0_4_lw.size(0)
-
-        ############################
-        # Total LOSS
-        ############################
-        total_loss = lc1 + 0.01*lc03 + 0.01*ll
-        #print("THELOSS: ",float(total_loss.item()))
-        #print("     c1",float(lc1.item()), "c0_3",float(lc03.item()) , "ll",float(ll.item()))
-
-        return total_loss
+        return lc1
 
 class MyNN(nn.Module):
     def __init__(self, in_channels, out_channels=None, hidden_gain=2, activated=True,p=0.2):
@@ -400,8 +358,8 @@ class ConvNet(nn.Module):
         # self.layer1 = BNReLUConv2D(kernel_size=3, in_channels=4,  out_channels=10)
         # self.layer2 = BNReLUConv2D(kernel_size=3, in_channels=10, out_channels=10)
         # self.layer3 = ConvELU2D(kernel_size=3,    in_channels=10, out_channels=10)
-        
-        self.unet    = ResBlockUnet(in_channels=5)
+        self.res_block = ResBlock(in_channels=5, out_channels=15)
+        self.unet    = ResBlockUnet(in_channels=15, depth=4, gain=2)
 
         #self.dropout = nn.Dropout2d(p=0.2)
 
@@ -434,12 +392,10 @@ class ConvNet(nn.Module):
 
     def forward(self, padded_image,  padded_cell_masks, 
                 cell_0_bounds, cell_1_bounds, 
-                cell_1_sizes, cell_2_sizes,
-                cell0_3_bounds, c03, fc03,
-                lifted_edges):
+                cell_1_sizes, cell_2_sizes):
 
-        lifted_edges = torch.squeeze(lifted_edges)
-        cell0_3_bounds = torch.squeeze(cell0_3_bounds)-1
+        #lifted_edges = torch.squeeze(lifted_edges)
+        #cell0_3_bounds = torch.squeeze(cell0_3_bounds)-1
 
 
 
@@ -453,8 +409,8 @@ class ConvNet(nn.Module):
 
         input = torch.cat([padded_image, torch.unsqueeze(is_boundary, 0)], 1)
         #input = self.dropout(input)
-
-        out = self.unet(input)
+        out = self.res_block(input)
+        out = self.unet(out)
 
 
         cell_1_features, cell_2_features = self.acc(out, 
@@ -486,7 +442,7 @@ class ConvNet(nn.Module):
         cell_2_features_u = cell_2_features_new[u, :]
         cell_2_features_v = cell_2_features_new[v, :]
 
-        if True:
+        if False:
 
             lu = lifted_edges[:,0] - 1
             lv = lifted_edges[:,1] - 1
@@ -510,39 +466,39 @@ class ConvNet(nn.Module):
         cell_1_pred = self.hidden_3(cell_1_feat)
         cell_1_pred = self.sigmoid(cell_1_pred)
 
+        if False:
+            # extract the j represenation
+            # |C3| x F x 1
+            e30 =cell_1_feat[cell0_3_bounds[:,0],:].unsqueeze(2)
+            e31 =cell_1_feat[cell0_3_bounds[:,1],:].unsqueeze(2)
+            e32 =cell_1_feat[cell0_3_bounds[:,2],:].unsqueeze(2)
 
-        # extract the j represenation
-        # |C3| x F x 1
-        e30 =cell_1_feat[cell0_3_bounds[:,0],:].unsqueeze(2)
-        e31 =cell_1_feat[cell0_3_bounds[:,1],:].unsqueeze(2)
-        e32 =cell_1_feat[cell0_3_bounds[:,2],:].unsqueeze(2)
+            p30 =cell_1_pred[cell0_3_bounds[:,0],:].unsqueeze(2)
+            p31 =cell_1_pred[cell0_3_bounds[:,1],:].unsqueeze(2)
+            p32 =cell_1_pred[cell0_3_bounds[:,2],:].unsqueeze(2)
 
-        p30 =cell_1_pred[cell0_3_bounds[:,0],:].unsqueeze(2)
-        p31 =cell_1_pred[cell0_3_bounds[:,1],:].unsqueeze(2)
-        p32 =cell_1_pred[cell0_3_bounds[:,2],:].unsqueeze(2)
-
-        # |C3| x edge_hidden.out x 3 
-        j3_e_feat = torch.cat([e30,e31,e32], 2)
-        j3_p_feat = torch.cat([p30,p31,p32], 2)
-
-
+            # |C3| x edge_hidden.out x 3 
+            j3_e_feat = torch.cat([e30,e31,e32], 2)
+            j3_p_feat = torch.cat([p30,p31,p32], 2)
 
 
 
 
-        #j3_feat =  |J| x 2*per_cell1_channels x 3
-        j3_feat = self.j3(masks=torch.squeeze(c03), image_data=torch.squeeze(fc03))
-        
-
-        j3_feat = torch.cat([j3_feat, j3_e_feat, j3_p_feat], 1)
-        #j3_feat =  |J| x (2*per_cell1_channels  +edge_liear.out_channels)* 3
-        j3_feat = j3_feat.view(j3_feat.size(0), -1)
-        
 
 
-        j3_pred = self.nn_j3(j3_feat)
-        j3_pred = self.softmax(j3_pred)
+            #j3_feat =  |J| x 2*per_cell1_channels x 3
+            j3_feat = self.j3(masks=torch.squeeze(c03), image_data=torch.squeeze(fc03))
+            
+
+            j3_feat = torch.cat([j3_feat, j3_e_feat, j3_p_feat], 1)
+            #j3_feat =  |J| x (2*per_cell1_channels  +edge_liear.out_channels)* 3
+            j3_feat = j3_feat.view(j3_feat.size(0), -1)
+            
+
+
+            j3_pred = self.nn_j3(j3_feat)
+            j3_pred = self.softmax(j3_pred)
 
 
 
-        return cell_1_pred, j3_pred,lifted_pred
+        return cell_1_pred#, j3_pred,lifted_pred

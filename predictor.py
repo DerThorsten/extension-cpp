@@ -115,6 +115,45 @@ def convert_pred(pred_c0, backward_mapping):
     preds/=w
     return preds
 
+
+
+
+def post_process(img_rgb, seg):
+    
+    rag = nifty.graph.rag.gridRag(seg)
+
+    # is touching border
+    border = numpy.zeros(seg.shape)
+    border[:, 0] = 1
+    border[:,-1] = 1
+    border[ 0,:] = 1
+    border[-1,:] = 1
+    edge_features, node_features = nifty.graph.rag.accumulateMeanAndLength(
+    rag, pmap, [10,10],1)
+    touches_border = node_features[:,0] >= 0.00000001
+    edgeSizes = edge_features[:,1]
+    nodeSizes = node_features[:,1]
+
+    
+
+    for node in rag.nodes():
+
+        degree = rag.degree(node)
+
+        if degree == 1:
+            pass
+
+        elif degree == 2:
+            pass
+
+
+
+
+
+
+
+
+
 class Predictor(object):
     def __init__(self, model, ds, output_folder):
         self.model = model.eval()
@@ -197,7 +236,7 @@ class Predictor(object):
         # new lifted nh
         g = nifty.graph.undirectedGraph(cell_1_bounds.max()+1)
         g.insertEdges(cell_1_bounds)
-        lifted_edges, distances = g.graphNeighbourhoodAndDistance(maxDistance=5, suppressGraphEdges=True)
+        lifted_edges, distances = g.graphNeighbourhoodAndDistance(maxDistance=6, suppressGraphEdges=True)
         
 
 
@@ -205,8 +244,8 @@ class Predictor(object):
 
         sp  = res_odict["sp"]
 
-        acc_preds = cell1_preds.copy()*14.0
-        acc_w = numpy.ones_like(acc_preds)*14.0
+        acc_preds = cell1_preds.copy()*40.0
+        acc_w = numpy.ones_like(acc_preds)*40.0
 
         acc_lifted_preds = numpy.zeros(lifted_edges.shape[0])
         acc_w_lifted_preds = numpy.zeros(lifted_edges.shape[0])
@@ -326,7 +365,7 @@ class Predictor(object):
 
       
     def predict_lmc(self, index):
-        res_odict, backward_mapping, cell1_preds, cell0_3_preds, lifted_preds = self.predict_augmented(index)
+        res_odict, backward_mapping, cell1_preds, cell0_3_preds, lifted_preds = self.predict_sp_augmented(index)
    
         cell_1_bounds   = res_odict["cell_1_bounds"]
         sp              = res_odict["sp"]
@@ -448,7 +487,7 @@ class Predictor(object):
         ls = numpy.minimum(su,sv).astype('float')
         w_lifted *= (ls/ls.max())
         w_lifted /= w_lifted.shape[0]
-        w_lifted *= 3.0
+        w_lifted *= 0.75
         
         if lifted_distances is not None:
             w_lifted /= (lifted_distances.astype('float') + 1.0)**2
@@ -460,7 +499,7 @@ class Predictor(object):
         import nifty.graph
 
 
-
+        # 28  0.838
 
 
         max_node = cell_1_bounds.max()

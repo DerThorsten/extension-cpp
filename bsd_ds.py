@@ -127,9 +127,9 @@ class Bsd500Sp(Dataset):
         return tuple(res)
 
 
-    def make_cell_1_gt(self, tgrid, sp, cell_1_bounds,lifted_edges, gt_stack, cell_1_sizes, cell_2_sizes):
+    def make_cell_1_gt(self, tgrid, sp, cell_1_bounds, gt_stack, cell_1_sizes):
         soft_cell_1_gt = numpy.zeros(tgrid.numberOfCells[1], dtype='float32')
-        soft_lifted_edge_gt = numpy.zeros(lifted_edges.shape[0], dtype='float32')
+        #soft_lifted_edge_gt = numpy.zeros(lifted_edges.shape[0], dtype='float32')
 
         for i in range(gt_stack.shape[0]):
             labels = gt_stack[i,...]
@@ -139,22 +139,22 @@ class Bsd500Sp(Dataset):
                                            groundTruth=labels)
 
             soft_cell_1_gt      += overlap.differentOverlaps(cell_1_bounds)
-            soft_lifted_edge_gt += overlap.differentOverlaps(lifted_edges)
+            #soft_lifted_edge_gt += overlap.differentOverlaps(lifted_edges)
 
         soft_cell_1_gt /= gt_stack.shape[0]
         hard_gt = numpy.round(soft_cell_1_gt, 1)
         #semi_hard_gt = 0.01*soft_cell_1_gt + 0.99*hard_gt
 
-        soft_lifted_edge_gt /= gt_stack.shape[0]
-        hard_lifted_edge_gt = numpy.round(soft_lifted_edge_gt, 1)
+        #soft_lifted_edge_gt /= gt_stack.shape[0]
+        #hard_lifted_edge_gt = numpy.round(soft_lifted_edge_gt, 1)
         #emi_hard_lifted_edge_gt = 0.01*soft_lifted_edge_gt + 0.99*hard_lifted_edge_gt
 
-        slu = cell_1_sizes[lifted_edges[:,0]-1]
-        slv = cell_1_sizes[lifted_edges[:,1]-1]
-        lifted_edge_sizes = numpy.minimum(slu, slv)
+        #slu = cell_1_sizes[lifted_edges[:,0]-1]
+        #slv = cell_1_sizes[lifted_edges[:,1]-1]
+        #lifted_edge_sizes = numpy.minimum(slu, slv)
 
-        return hard_gt,        get_cell_1_loss_weight(soft_cell_1_gt, sizes=cell_1_sizes), \
-               hard_lifted_edge_gt, get_cell_1_loss_weight(soft_lifted_edge_gt, sizes=lifted_edge_sizes)
+        return hard_gt,        get_cell_1_loss_weight(soft_cell_1_gt, sizes=cell_1_sizes)
+               #hard_lifted_edge_gt, get_cell_1_loss_weight(soft_lifted_edge_gt, sizes=lifted_edge_sizes)
 
     def make_cell_masks(self, tgrid):
 
@@ -247,7 +247,7 @@ class Bsd500Sp(Dataset):
             sp = numpy.require(sp, dtype='uint32')
             sp = vigra.analysis.labelImage(sp)
         else:
-            sp = bsd_sp(img_raw_big, pmap, n_sp = 1000, tt_augment=tt_augment,train=self.split=='train')
+            sp = bsd_sp(img_raw_big, pmap, n_sp = 2000, tt_augment=tt_augment,train=self.split=='train')
         sp = numpy.require(sp.view(numpy.ndarray), requirements=['C'])
       
         # assert sp.shape == small_shape
@@ -268,16 +268,16 @@ class Bsd500Sp(Dataset):
         cell_1_bounds = cell_bounds[1].__array__().astype('int32')
 
 
-        lifted_edges = extractLiftedEdges(cell_1_bounds, d=3)
+        #lifted_edges = extractLiftedEdges(cell_1_bounds, d=3)
 
-        if self.split == 'train':
+        #if self.split == 'train':
 
-            max_l = 3000
-            if lifted_edges.shape[0] > max_l + 1:
-                indices = numpy.arange(lifted_edges.shape[0])
-                numpy.random.shuffle(indices)
-                indices=indices[0:max_l]
-                lifted_edges = lifted_edges[indices,:]
+            # max_l = 3000
+            # if lifted_edges.shape[0] > max_l + 1:
+            #     indices = numpy.arange(lifted_edges.shape[0])
+            #     numpy.random.shuffle(indices)
+            #     indices=indices[0:max_l]
+            #     lifted_edges = lifted_edges[indices,:]
 
 
 
@@ -293,17 +293,15 @@ class Bsd500Sp(Dataset):
         #print("make gt")
 
         # transform image level gt to cell1 (sp-boundaries) gt
-        cell_1_gt, cell_1_loss_weight, lifted_edge_gt, lifted_edge_loss_weight = self.make_cell_1_gt(
+        cell_1_gt, cell_1_loss_weight = self.make_cell_1_gt(
             tgrid=tgrid, 
             cell_1_bounds=cell_1_bounds,
-            lifted_edges=lifted_edges,
             sp=sp,
             gt_stack=gt_stack,
-            cell_1_sizes=cell_1_sizes,
-            cell_2_sizes=cell_2_sizes)
+            cell_1_sizes=cell_1_sizes)
     
-        assert lifted_edge_gt.min()>=0.0
-        assert lifted_edge_gt.max()<=1.0
+        #assert lifted_edge_gt.min()>=0.0
+        #assert lifted_edge_gt.max()<=1.0
         #print("lifted_edge_gt", lifted_edge_gt[0:30])
         #print("lifted_edge_loss_weight", lifted_edge_loss_weight[0:30])
 
@@ -355,34 +353,34 @@ class Bsd500Sp(Dataset):
 
 
 
-        c03, c04, fc03, fc04 = nifty.cgp.cell0Cell1Masks(
-            padded_image_data=padded_image,
-            padded_cell_1_mask=padded_cell_masks[1,...].astype('int'),
-            padded_cell_0_coordinates=padded_cell_0_coordinates.astype('int'),
-            cell_0_bounds=cell_0_bounds.astype('int'),
-            size=16
-        )
+        # c03, c04, fc03, fc04 = nifty.cgp.cell0Cell1Masks(
+        #     padded_image_data=padded_image,
+        #     padded_cell_1_mask=padded_cell_masks[1,...].astype('int'),
+        #     padded_cell_0_coordinates=padded_cell_0_coordinates.astype('int'),
+        #     cell_0_bounds=cell_0_bounds.astype('int'),
+        #     size=16
+        # )
 
         
 
-        cell0_3_indices = numpy.where(cell_0_bounds[:,3] == 0)[0]
-        if False:
-            cell0_4_indices = numpy.where(cell_0_bounds[:,3] != 0)[0]
+        # cell0_3_indices = numpy.where(cell_0_bounds[:,3] == 0)[0]
+        # if False:
+        #     cell0_4_indices = numpy.where(cell_0_bounds[:,3] != 0)[0]
 
-        # this still starts at 1
-        cell0_3_bounds = cell_0_bounds[cell0_3_indices, 0:3]
-        if False:
-            cell0_4_bounds = cell_0_bounds[cell0_4_indices, :]
+        # # this still starts at 1
+        # cell0_3_bounds = cell_0_bounds[cell0_3_indices, 0:3]
+        # if False:
+        #     cell0_4_bounds = cell_0_bounds[cell0_4_indices, :]
 
 
-        cell0_3_gt, cell0_3_lw = make_cell_0_gt(cell_bounds=cell0_3_bounds,
-            cell_1_gt=cell_1_gt,
-            jsize=3)
+        # cell0_3_gt, cell0_3_lw = make_cell_0_gt(cell_bounds=cell0_3_bounds,
+        #     cell_1_gt=cell_1_gt,
+        #     jsize=3)
 
-        if False:
-            cell0_4_gt, cell0_4_lw = make_cell_0_gt(cell_bounds=cell0_4_bounds,
-                cell_1_gt=cell_1_gt,
-                jsize=4)
+        # if False:
+        #     cell0_4_gt, cell0_4_lw = make_cell_0_gt(cell_bounds=cell0_4_bounds,
+        #         cell_1_gt=cell_1_gt,
+        #         jsize=4)
 
 
 
@@ -402,12 +400,12 @@ class Bsd500Sp(Dataset):
         return_dict["cell_1_bounds"] = torch.from_numpy(numpy.require(cell_1_bounds, requirements=['C']))
         return_dict["cell_1_sizes"] = torch.from_numpy(cell_1_sizes).int()
         return_dict["cell_2_sizes"] = torch.from_numpy(cell_2_sizes).int()
-        return_dict["cell0_3_bounds"] = torch.from_numpy(cell0_3_bounds).long()
+        #return_dict["cell0_3_bounds"] = torch.from_numpy(cell0_3_bounds).long()
         #return_dict["cell0_4_bounds"] = torch.from_numpy(cell0_4_bounds).long()
-        return_dict["c03"] = torch.from_numpy(c03).int()
+        #return_dict["c03"] = torch.from_numpy(c03).int()
         #return_dict["c04"] = torch.from_numpy(c04).int()
-        return_dict["fc03"] = torch.from_numpy(fc03)
-        return_dict["lifted_edges"] = torch.from_numpy(lifted_edges.astype('int')).long()
+        #return_dict["fc03"] = torch.from_numpy(fc03)
+        #return_dict["lifted_edges"] = torch.from_numpy(lifted_edges.astype('int')).long()
         
         
         #return_dict["fc04"] = torch.from_numpy(fc04)
@@ -415,17 +413,17 @@ class Bsd500Sp(Dataset):
         ########################################
         # Y
         ########################################
-        assert cell0_3_gt.ndim == 1
+        #assert cell0_3_gt.ndim == 1
         #assert cell0_4_gt.ndim == 1
 
         return_dict["cell_1_gt"] = torch.from_numpy(cell_1_gt)
         return_dict["cell_1_loss_weight"] = torch.from_numpy(cell_1_loss_weight)
-        return_dict["cell0_3_gt"] = torch.from_numpy(cell0_3_gt).long()
+        #return_dict["cell0_3_gt"] = torch.from_numpy(cell0_3_gt).long()
         #return_dict["cell0_4_gt"] = torch.from_numpy(cell0_4_gt).long()
-        return_dict["cell0_3_lw"] = torch.from_numpy(cell0_3_lw)
+        #return_dict["cell0_3_lw"] = torch.from_numpy(cell0_3_lw)
         #return_dict["cell0_4_lw"] = torch.from_numpy(cell0_4_lw)
-        return_dict["lifted_edge_gt"] = torch.from_numpy(lifted_edge_gt)
-        return_dict["lifted_edge_loss_weight"] = torch.from_numpy(lifted_edge_loss_weight)
+        #return_dict["lifted_edge_gt"] = torch.from_numpy(lifted_edge_gt)
+        #return_dict["lifted_edge_loss_weight"] = torch.from_numpy(lifted_edge_loss_weight)
         
 
         ########################################
@@ -442,9 +440,9 @@ class Bsd500Sp(Dataset):
         return return_dict
 
     def num_inputs(self):
-        return 10
-    def num_targets(self):
         return 6
+    def num_targets(self):
+        return 2
 
     def __len__(self):
         #return 1

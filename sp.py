@@ -125,14 +125,14 @@ def bsd_sp(img_rgb_in, pmap, n_sp=500, train=False, tt_augment=False):
     nodeSizes = node_features[:,1]
 
 
-    sizeRegularizer = augrand(0.75, sigma=0.02, range=[0.20, 1.0])
+    sizeRegularizer = augrand(0.85, sigma=0.02, range=[0.20, 1.0])
     #print("sizeRegularizer",sizeRegularizer)
     #sizeRegularizer = 0.25
     if tt_augment:
         mx = min(rag.numberOfNodes-1, 2000)
-        #numberOfNodesStop = int(augrand(n_sp, sigma=200.0, range=[200, mx]))
-        numberOfNodesStop = numpy.random.randint(10, 2500)
-        numberOfNodesStop = min(numberOfNodesStop, rag.numberOfNodes-1)
+        numberOfNodesStop = int(augrand(n_sp, sigma=200.0, range=[200, mx]))
+        #numberOfNodesStop = numpy.random.randint(10, 2500)
+        #numberOfNodesStop = min(numberOfNodesStop, rag.numberOfNodes-1)
     else:
         mx = min(rag.numberOfNodes-1, 1800)
         numberOfNodesStop = int(augrand(n_sp, sigma=200.0, range=[500,  mx]))
@@ -211,8 +211,8 @@ def bsd_sp(img_rgb_in, pmap, n_sp=500, train=False, tt_augment=False):
     seg = seg.astype('uint32')
 
     #print("SEG", )
-    #vigra.segShow(vigra.sampling.resize(vigra.taggedView(img_rgb_big,'xyc'), seg.shape), vigra.taggedView(seg,'xy'))
-    #vigra.show()
+    vigra.segShow(vigra.sampling.resize(vigra.taggedView(img_rgb_big,'xyc'), seg.shape), vigra.taggedView(seg,'xy'))
+    vigra.show()
 
     return vigra.analysis.labelImage(seg.astype('uint32'))
 
