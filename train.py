@@ -51,8 +51,8 @@ if __name__ == '__main__':
     from inferno.extensions.layers.reshape import Flatten
 
     # Fill these in:
-    LOG_DIRECTORY = '/home/tbeier/src/extension-cpp/log_new/'
-    SAVE_DIRECTORY = '/home/tbeier/src/extension-cpp/savedir_new/'
+    LOG_DIRECTORY = '/export/home/tbeier/src/extension-cpp/log_new/'
+    SAVE_DIRECTORY = '/export/home/tbeier/src/extension-cpp/savedir_new/'
 
     USE_CUDA = bool(1)
 
@@ -64,8 +64,8 @@ if __name__ == '__main__':
     #transforms = transforms.Compose([transforms.CenterCrop(100), transforms.ToTensor()])
 
 
-    bsd_root = "/home/tbeier/datasets/BSR/BSDS500/"
-    pmap_root = "/home/tbeier/src/holy-edge/hed-data/out"
+    bsd_root = "/export/home/tbeier/dataset/BSR/BSDS500/"
+    pmap_root = "/export/home/tbeier/bsd500_HED/"
     split = "train"
 
 
