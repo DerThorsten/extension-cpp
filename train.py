@@ -41,7 +41,7 @@ warnings.filterwarnings("ignore")
 if __name__ == '__main__':
 
 
-
+    laptop = True
 
     import torch.nn as nn
     from inferno.io.box.cifar import get_cifar10_loaders
@@ -51,9 +51,7 @@ if __name__ == '__main__':
     from inferno.extensions.layers.reshape import Flatten
 
     # Fill these in:
-    LOG_DIRECTORY = '/export/home/tbeier/src/extension-cpp/log_new/'
-    SAVE_DIRECTORY = '/export/home/tbeier/src/extension-cpp/savedir_new/'
-
+    
     USE_CUDA = bool(1)
 
     # Device configuration
@@ -64,8 +62,18 @@ if __name__ == '__main__':
     #transforms = transforms.Compose([transforms.CenterCrop(100), transforms.ToTensor()])
 
 
-    bsd_root = "/export/home/tbeier/dataset/BSR/BSDS500/"
-    pmap_root = "/export/home/tbeier/bsd500_HED/"
+    if laptop==False:
+        bsd_root = "/export/home/tbeier/dataset/BSR/BSDS500/"
+        pmap_root = "/export/home/tbeier/bsd500_HED/"
+        LOG_DIRECTORY = '/export/home/tbeier/src/extension-cpp/log_new/'
+        SAVE_DIRECTORY = '/export/home/tbeier/src/extension-cpp/savedir_new/'
+
+    else:
+        bsd_root = "/home/tbeier/datasets/BSR/BSDS500/"
+        pmap_root = "/home/tbeier/src/holy-edge/hed-data/out/"
+        LOG_DIRECTORY = '/home/tbeier/src/extension-cpp/log_new/'
+        SAVE_DIRECTORY = '/home/tbeier/src/extension-cpp/savedir_new/'
+
     split = "train"
 
 
@@ -74,7 +82,7 @@ if __name__ == '__main__':
     import inferno.io.transform as trafo
 
     joint_transformation = trafo.Compose(
-        #trafo.image.ElasticTransform(1,1),
+        #trafo.image.RandomScaleSegmentation([0.8, 1.2]),
         trafo.image.RandomRotate(),
         trafo.image.RandomTranspose(),
         trafo.image.RandomFlip()
