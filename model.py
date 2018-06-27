@@ -359,7 +359,7 @@ class ConvNet(nn.Module):
         # self.layer2 = BNReLUConv2D(kernel_size=3, in_channels=10, out_channels=10)
         # self.layer3 = ConvELU2D(kernel_size=3,    in_channels=10, out_channels=10)
         self.res_block = ResBlock(in_channels=5, out_channels=15)
-        self.unet    = ResBlockUnet(in_channels=15, depth=4, gain=2)
+        self.unet    = ResBlockUnet(in_channels=15, depth=5, gain=2)
 
         #self.dropout = nn.Dropout2d(p=0.2)
 

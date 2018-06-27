@@ -211,8 +211,8 @@ def bsd_sp(img_rgb_in, pmap, n_sp=500, train=False, tt_augment=False):
     seg = seg.astype('uint32')
 
     #print("SEG", )
-    vigra.segShow(vigra.sampling.resize(vigra.taggedView(img_rgb_big,'xyc'), seg.shape), vigra.taggedView(seg,'xy'))
-    vigra.show()
+    #vigra.segShow(vigra.sampling.resize(vigra.taggedView(img_rgb_big,'xyc'), seg.shape), vigra.taggedView(seg,'xy'))
+    #vigra.show()
 
     return vigra.analysis.labelImage(seg.astype('uint32'))
 
