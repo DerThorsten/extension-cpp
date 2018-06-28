@@ -130,11 +130,11 @@ def bsd_sp(img_rgb_in, pmap, n_sp=500, train=False, tt_augment=False):
     #sizeRegularizer = 0.25
     if tt_augment:
         mx = min(rag.numberOfNodes-1, 2000)
-        numberOfNodesStop = int(augrand(n_sp, sigma=200.0, range=[200, mx]))
+        numberOfNodesStop = int(augrand(n_sp, sigma=2000.0, range=[200, mx]))
         #numberOfNodesStop = numpy.random.randint(10, 2500)
         #numberOfNodesStop = min(numberOfNodesStop, rag.numberOfNodes-1)
     else:
-        mx = min(rag.numberOfNodes-1, 1800)
+        mx = min(rag.numberOfNodes-1, 3000)
         numberOfNodesStop = int(augrand(n_sp, sigma=200.0, range=[500,  mx]))
     #("numberOfNodesStop",numberOfNodesStop)
     #print("sizeRegularizer",sizeRegularizer)

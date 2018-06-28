@@ -10,6 +10,15 @@ import nifty.segmentation
 import nifty.ground_truth 
 
 
+
+# make a rag
+import nifty.graph
+import nifty.ufd
+
+import numpy
+import nifty.segmentation
+import pylab
+
 def flip(x, dim):
     indices = [slice(None)] * x.dim()
     indices[dim] = torch.arange(x.size(dim) - 1, -1, -1,
@@ -203,40 +212,36 @@ class Predictor(object):
             tlist[0] = aug_rgbp
             tlist[1] = aug_masks
         
-            cell1_preds, cell0_3_preds, lifted_preds = self.model(
+            cell1_preds = self.model(
                 *tlist[0:self.ds.num_inputs()]
             )
             assert cell1_preds.min()>=0.0
             assert cell1_preds.max()<=1.0
             cell1_preds_list.append(to_numpy(cell1_preds))
-            cell0_3_preds_list.append(to_numpy(cell0_3_preds))
-            lifted_preds_list.append(to_numpy(lifted_preds))
             weights.append(weight)
 
     
 
 
         cell1_preds = numpy.average(cell1_preds_list, weights=weights, axis=0).squeeze()
-        cell0_3_preds = numpy.average(cell0_3_preds_list, weights=weights, axis=0).squeeze()
-        lifted_preds = numpy.average(lifted_preds_list, weights=weights, axis=0).squeeze()
 
         assert cell1_preds.min()>=0.0
         assert cell1_preds.max()<=1.0
         
-        return res_odict, backward_mapping, cell1_preds, cell0_3_preds, lifted_preds
+        return res_odict, backward_mapping, cell1_preds
 
 
     def predict_sp_augmented(self, index, sp=None):
         # reference
-        res_odict, backward_mapping, cell1_preds, cell0_3_preds, lifted_preds = self.predict_augmented(index, sp=sp)
+        res_odict, backward_mapping, cell1_preds = self.predict_augmented(index, sp=sp)
         cell_1_bounds = res_odict["cell_1_bounds"]
-        lifted_edges = res_odict["lifted_edges"]
+        #lifted_edges = res_odict["lifted_edges"]
 
 
         # new lifted nh
         g = nifty.graph.undirectedGraph(cell_1_bounds.max()+1)
         g.insertEdges(cell_1_bounds)
-        lifted_edges, distances = g.graphNeighbourhoodAndDistance(maxDistance=6, suppressGraphEdges=True)
+        lifted_edges, distances = g.graphNeighbourhoodAndDistance(maxDistance=3, suppressGraphEdges=True)
         
 
 
@@ -253,10 +258,9 @@ class Predictor(object):
 
 
 
-        for i in range(30):
-            res_odict2, backward_mapping2, cell1_preds2, cell0_3_preds2, lifted_preds2 = self.predict_augmented(index, tt_augment=True,  with_aug=False)
+        for i in range(20):
+            res_odict2, backward_mapping2, cell1_preds2 = self.predict_augmented(index, tt_augment=True,  with_aug=False)
             cell_1_bounds2 = res_odict2["cell_1_bounds"]
-            lifted_edges2 = res_odict2["lifted_edges"]
             sp2  = res_odict2["sp"]
 
 
@@ -278,17 +282,6 @@ class Predictor(object):
             )
             acc_lifted_preds += aug_lifted_p
             acc_w_lifted_preds += w_aug_lifted_p
-
-
-            # transfer lifted from others non lifted
-            aug_lifted_p, w_aug_lifted_p = overlap.transferCutProbabilities(
-                lifted_edges,
-                lifted_edges2,
-                lifted_preds2
-            )
-            acc_lifted_preds += 0.2*aug_lifted_p
-            acc_w_lifted_preds += 0.2*w_aug_lifted_p
-
 
 
             # transfer non lifted
@@ -317,16 +310,16 @@ class Predictor(object):
         #    print("oo",lifted_preds[i],"nn",lifted_preds_new[i],lifted_preds_new[i]-lifted_preds[i])
         res_odict["lifted_edges"] = lifted_edges
         res_odict["lifted_distances"] = distances
-        return res_odict, backward_mapping, cell1_preds, cell0_3_preds, lifted_preds_new
+        return res_odict, backward_mapping, cell1_preds, lifted_preds_new
 
 
     def predict_agglo(self, index):
-        import nifty.ufd
+
 
         batch = 100
         sp = None
         while(True):
-            res_odict, backward_mapping, cell1_preds, cell0_3_preds, lifted_preds = self.predict_sp_augmented(index,sp=sp)
+            res_odict, backward_mapping, cell1_preds, cell0_3_preds = self.predict_augmented(index,sp=sp)
             cell_1_bounds = to_numpy(res_odict["cell_1_bounds"])
             img_raw       = res_odict["img_raw"]
             sp            = res_odict["sp"]
@@ -356,8 +349,6 @@ class Predictor(object):
             labels = ufd.elementLabeling()
             sp = numpy.take(labels.astype('int'), sp.astype('int'))
 
-        import nifty.segmentation
-        import pylab
         img_small = im_raw
         ol = nifty.segmentation.segmentOverlay(image=img_small, segmentation=sp, beta=0.24)
         pylab.imshow(numpy.swapaxes(ol, 0,1))
@@ -365,7 +356,7 @@ class Predictor(object):
 
       
     def predict_lmc(self, index):
-        res_odict, backward_mapping, cell1_preds, cell0_3_preds, lifted_preds = self.predict_sp_augmented(index)
+        res_odict, backward_mapping, cell1_preds, lifted_preds = self.predict_sp_augmented(index)
    
         cell_1_bounds   = res_odict["cell_1_bounds"]
         sp              = res_odict["sp"]
@@ -404,6 +395,7 @@ class Predictor(object):
 
         img_raw = vigra.taggedView(img_raw, "xyc")
         img_raw_big = vigra.sampling.resize(img_raw, [2*s-1 for s in img_raw.shape[0:2]])
+        img_raw_big/= img_raw_big.max()
 
 
 
@@ -422,7 +414,6 @@ class Predictor(object):
         cell1Geometry = cellGeometry[1]
 
 
-        import numpy
         cell_1_preds_wsum = numpy.zeros(tgrid.numberOfCells[1])
         cell_1_preds_w    = numpy.zeros(tgrid.numberOfCells[1])
 
@@ -432,152 +423,155 @@ class Predictor(object):
             cell_1_preds_wsum[cell_1_index] += 1.0*p1
             cell_1_preds_w[cell_1_index] += 1.0
 
-        # from cell 0
-        if True:
-            i3 = 0
-            for cell_0_index in range(tgrid.numberOfCells[0]):
-                bounds = cell_0_bounds[cell_0_index,:]
-                if bounds[3] == 0:
-                    jsize = 3
-                    bounds = bounds[0:3]
-                    cell_0_pred = cell0_3_preds[i3]
-                    #argmx = numpy.argmax(cell_0_pred)
-                    #cell_1_pred = backward_mapping[argmx, ...]
-                    cell_1_pred = convert_pred(cell_0_pred, backward_mapping)
-                    i3 += 1
+        # # from cell 0
+        # if True:
+        #     i3 = 0
+        #     for cell_0_index in range(tgrid.numberOfCells[0]):
+        #         bounds = cell_0_bounds[cell_0_index,:]
+        #         if bounds[3] == 0:
+        #             jsize = 3
+        #             bounds = bounds[0:3]
+        #             cell_0_pred = cell0_3_preds[i3]
+        #             #argmx = numpy.argmax(cell_0_pred)
+        #             #cell_1_pred = backward_mapping[argmx, ...]
+        #             cell_1_pred = convert_pred(cell_0_pred, backward_mapping)
+        #             i3 += 1
                 
 
-                    cell_1_indices = bounds  - 1
+        #             cell_1_indices = bounds  - 1
 
-                    for cell_1_index,p1 in zip(cell_1_indices, cell_1_pred):
+        #             for cell_1_index,p1 in zip(cell_1_indices, cell_1_pred):
                         
-                        if jsize == 3:
-                            cell_1_preds_wsum[cell_1_index] += 0.45*p1
-                            cell_1_preds_w[cell_1_index] += 0.45
+        #                 if jsize == 3:
+        #                     cell_1_preds_wsum[cell_1_index] += 0.45*p1
+        #                     cell_1_preds_w[cell_1_index] += 0.45
         
 
-        cell_1_preds_combined = cell_1_preds_wsum / cell_1_preds_w
 
-        visu = img_raw_big.copy()
-
-
-
-
+        print("cell1_preds", cell1_preds)
         
+        if True:
+            # from normal edges
+            eps = 0.0001
+            p1 = numpy.clip(cell1_preds, eps, 1.0-eps)
+            p0 = 1.0 - p1 
+            b_local = 0.5
+            w_local = numpy.log(p0/p1) + numpy.log((1.0-b_local)/b_local)
+            w_local *= cell_1_sizes.astype('float')/cell_1_sizes.max()
+            w_local /= w_local.shape[0]
 
-        # from normal edges
-        eps = 0.0001
-        p1 = numpy.clip(cell_1_preds_combined, eps, 1.0-eps)
-        p0 = 1.0 - p1 
-        b_local = 0.5
-        w_local = numpy.log(p0/p1) + numpy.log((1.0-b_local)/b_local)
-        w_local *= cell_1_sizes.astype('float')/cell_1_sizes.max()
-        w_local /= w_local.shape[0]
 
+            # from lifted edges
+            eps = 0.0001
+            p1 = numpy.clip(lifted_preds, eps, 1.0-eps)
+            p0 = 1.0 - p1 
+            b_lifted = 0.5
+            w_lifted = numpy.log(p0/p1) + numpy.log((1.0-b_lifted)/b_lifted)
 
-        # from lifted edges
-        eps = 0.0001
-        p1 = numpy.clip(lifted_preds, eps, 1.0-eps)
-        p0 = 1.0 - p1 
-        b_lifted = 0.5
-        w_lifted = numpy.log(p0/p1) + numpy.log((1.0-b_lifted)/b_lifted)
 
-        su = cell_2_sizes[lifted_edges[:,0]-1]
-        sv = cell_2_sizes[lifted_edges[:,1]-1]
-        ls = numpy.minimum(su,sv).astype('float')
-        w_lifted *= (ls/ls.max())
-        w_lifted /= w_lifted.shape[0]
-        w_lifted *= 0.75
-        
-        if lifted_distances is not None:
-            w_lifted /= (lifted_distances.astype('float') + 1.0)**2
 
+            su = cell_2_sizes[lifted_edges[:,0]-1]
+            sv = cell_2_sizes[lifted_edges[:,1]-1]
+            ls = numpy.minimum(su,sv).astype('float')
+            w_lifted *= (ls/ls.max())
+            w_lifted /= w_lifted.shape[0]
+            w_lifted *= 0.5
+            
+            if lifted_distances is not None:
+                w_lifted /= (lifted_distances.astype('float') + 1.0)**2
 
 
 
-        # make a rag
-        import nifty.graph
 
 
-        # 28  0.838
+            print("lifted_edges",lifted_edges.shape)
+            # 28  0.838
 
 
-        max_node = cell_1_bounds.max()
-        graph = nifty.graph.undirectedGraph(max_node + 1)
-        graph.insertEdges(cell_1_bounds)
+            max_node = cell_1_bounds.max()
+            graph = nifty.graph.undirectedGraph(max_node + 1)
+            graph.insertEdges(cell_1_bounds)
 
-        lmc_graph = nifty.graph.undirectedGraph(max_node + 1)
-        lmc_graph.insertEdges(cell_1_bounds)
-        #lmc_graph.insertEdges(lifted_edges)
+            lmc_graph = nifty.graph.undirectedGraph(max_node + 1)
+            lmc_graph.insertEdges(cell_1_bounds)
+            #lmc_graph.insertEdges(lifted_edges)
 
 
 
-      
+          
 
-        lmc_graph_w = numpy.zeros(lmc_graph.numberOfEdges)
-        #uv = rag.uvIds()
+            lmc_graph_w = numpy.zeros(lmc_graph.numberOfEdges)
+            #uv = rag.uvIds()
 
 
-        where_neg = numpy.where(w_lifted < 0.0)[0]
-        w_neg = w_lifted[where_neg]
-        lifted_edges_neg = lifted_edges[where_neg,:]
+            where_neg = numpy.where(w_lifted < 0.0)[0]
+            w_neg = w_lifted[where_neg]
+            lifted_edges_neg = lifted_edges[where_neg,:]
 
-        lmc_graph_w[lmc_graph.findEdges(cell_1_bounds)] = w_local
-        lmc_graph_w[lmc_graph.findEdges(lifted_edges_neg)] = w_neg
+            lmc_graph_w[lmc_graph.findEdges(cell_1_bounds)] = w_local
+            lmc_graph_w[lmc_graph.findEdges(lifted_edges_neg)] = w_neg
 
 
 
 
-        MulticutObjective = lmc_graph.__class__.MulticutObjective
-        solverFactory = MulticutObjective.multicutIlpCplexFactory()
-        objective = MulticutObjective(lmc_graph, lmc_graph_w)
+            MulticutObjective = lmc_graph.__class__.MulticutObjective
+            solverFactory = MulticutObjective.multicutIlpCplexFactory()
+            objective = MulticutObjective(lmc_graph, lmc_graph_w)
 
-        loggingVisitor = MulticutObjective.verboseVisitor(visitNth=1)
-        solver = solverFactory.create(objective)
-        result_mc = solver.optimize(loggingVisitor)
+            loggingVisitor = MulticutObjective.verboseVisitor(visitNth=1)
+            solver = solverFactory.create(objective)
+            result_mc = solver.optimize(loggingVisitor)
 
-        result_mc = nifty.graph.connectedComponentsFromNodeLabels(graph, result_mc)
+            result_mc = nifty.graph.connectedComponentsFromNodeLabels(graph, result_mc)
 
+            print("a1")
 
 
 
 
+            obj_lmc = nifty.graph.lifted_multicut.liftedMulticutObjective(graph)
 
+            print("a2")
 
-        obj_lmc = nifty.graph.lifted_multicut.liftedMulticutObjective(graph)
-        obj_lmc.setCosts(cell_1_bounds, w_local)
-        obj_lmc.setCosts(lifted_edges, w_lifted)
+            obj_lmc.setCosts(cell_1_bounds, w_local)
 
-        # solverFactory = obj_lmc.liftedMulticutGreedyAdditiveFactory()
-        # solver = solverFactory.create(obj)
-        # visitor = obj.verboseVisitor(1)
-        # arg = solver.optimize()
+            print("a2b")
 
-        solverFactory = obj_lmc.liftedMulticutKernighanLinFactory()
-        solver = solverFactory.create(obj_lmc)
-        visitor = obj_lmc.verboseVisitor(1)
-        arg2 = solver.optimize(visitor,result_mc)
+            obj_lmc.setCosts(lifted_edges, w_lifted)
 
 
-        pgen = obj_lmc.watershedProposalGenerator(sigma=1.0,seedingStrategie='SEED_FROM_LOCAL',
-                numberOfSeeds=0.1)
+            print("a3")
 
 
-        solverFactory = obj_lmc.fusionMoveBasedFactory(proposalGenerator=pgen, numberOfIterations=1000,
-            stopIfNoImprovement=100)
+            # solverFactory = obj_lmc.liftedMulticutGreedyAdditiveFactory()
+            # solver = solverFactory.create(obj)
+            # visitor = obj.verboseVisitor(1)
+            # arg = solver.optimize()
 
-        solver = solverFactory.create(obj_lmc)
-        visitor = obj_lmc.verboseVisitor(1)
-        arg3 = solver.optimize(visitor, arg2)
+            solverFactory = obj_lmc.liftedMulticutKernighanLinFactory()
+            solver = solverFactory.create(obj_lmc)
+            visitor = obj_lmc.verboseVisitor(1)
+            arg2 = solver.optimize(visitor,result_mc)
 
-        import pylab
-        seg = numpy.take(arg3.astype('int'), sp.astype('int')).astype('uint64')
 
+            pgen = obj_lmc.watershedProposalGenerator(sigma=1.0,seedingStrategie='SEED_FROM_LOCAL',
+                    numberOfSeeds=0.1)
 
 
+            solverFactory = obj_lmc.fusionMoveBasedFactory(proposalGenerator=pgen, numberOfIterations=1000,
+                stopIfNoImprovement=100)
 
+            solver = solverFactory.create(obj_lmc)
+            visitor = obj_lmc.verboseVisitor(1)
+            arg3 = solver.optimize(visitor, arg2)
+            print("a4")
 
+            seg = numpy.take(arg3.astype('int'), sp.astype('int')).astype('uint64')
 
+            img_small = vigra.sampling.resize(vigra.taggedView(img_raw,'xyc'), seg.shape)
+            ol = nifty.segmentation.segmentOverlay(image=img_small, segmentation=seg, beta=0.24)
+            # pylab.imshow(numpy.swapaxes(ol, 0,1))
+            # pylab.show()
 
 
 
@@ -585,45 +579,52 @@ class Predictor(object):
 
 
 
-        # and again
-        # make the Region adjacency graph (RAG)
-        rag = nifty.graph.rag.gridRag(seg)
-        gradmag = vigra.filters.gaussianGradientMagnitude(img_raw, 1.0).squeeze().view(numpy.ndarray)
-        gradmag = numpy.require(gradmag, requirements=['C'])
-        edge_features, node_features = nifty.graph.rag.accumulateMeanAndLength(
-            rag, gradmag, [10,10],1)
-        meanEdgeStrength = edge_features[:,0]
-        edgeSizes = edge_features[:,1]
-        nodeSizes = node_features[:,1]
 
 
-        minimumNodeSize = int(15**2)
-        # print("minimumNodeSize",minimumNodeSize)
-        # cluster-policy  
-        nodeSeg = nifty.graph.agglo.sizeLimitClustering(
-            graph=rag,nodeSizes=nodeSizes, edgeIndicators=meanEdgeStrength,
-            edgeSizes=edgeSizes, sizeRegularizer=0.5,
-            minimumNodeSize=minimumNodeSize)
 
-        #gglomerativeClustering = nifty.graph.agglo.agglomerativeClustering(clusterPolicy) 
-        #gglomerativeClustering.run(verbose=0, printNth=0)
-        #odeSeg = agglomerativeClustering.result()
+            # and again
+            # make the Region adjacency graph (RAG)
+            rag = nifty.graph.rag.gridRag(seg.astype('uint64'))
+            gradmag = vigra.filters.gaussianGradientMagnitude(img_raw, 1.0).squeeze().view(numpy.ndarray)
+            gradmag = numpy.require(gradmag, requirements=['C'])
+            edge_features, node_features = nifty.graph.rag.accumulateMeanAndLength(
+                rag, gradmag, [10,10],1)
+            meanEdgeStrength = edge_features[:,0]
+            edgeSizes = edge_features[:,1]
+            nodeSizes = node_features[:,1]
 
-        # convert graph segmentation
-        # to pixel segmentation
-        seg = nifty.graph.rag.projectScalarNodeDataToPixels(rag, nodeSeg)
+            print("a6")
+            print("rag",rag)
+            print("nodeSizes.shape",nodeSizes.shape)
+            print("meanEdgeStrength.shape",meanEdgeStrength.shape)
 
+            minimumNodeSize = int(15**2)
+            # print("minimumNodeSize",minimumNodeSize)
+            # cluster-policy  
+            nodeSeg = nifty.graph.agglo.sizeLimitClustering(
+                graph=rag, nodeSizes=nodeSizes, edgeIndicators=meanEdgeStrength,
+                edgeSizes=edgeSizes, sizeRegularizer=0.5,
+                minimumNodeSize=minimumNodeSize)
+            print("a6b")
+            #gglomerativeClustering = nifty.graph.agglo.agglomerativeClustering(clusterPolicy) 
+            #gglomerativeClustering.run(verbose=0, printNth=0)
+            #odeSeg = agglomerativeClustering.result()
 
+            # convert graph segmentation
+            # to pixel segmentation
+            seg = nifty.graph.rag.projectScalarNodeDataToPixels(rag, nodeSeg)
 
+            print("a7")
 
 
 
 
-        img_small = vigra.sampling.resize(vigra.taggedView(img_raw,'xyc'), seg.shape)
-        ol = nifty.segmentation.segmentOverlay(image=img_small, segmentation=seg, beta=0.24)
+
+        img_small = vigra.sampling.resize(vigra.taggedView(img_raw,'xyc'), sp.shape)
+        #ol = nifty.segmentation.segmentOverlay(image=img_small, segmentation=seg, beta=0.24)
         # pylab.imshow(numpy.swapaxes(ol, 0,1))
         # pylab.show()
-        #visu = img_raw.copy()
+        visu = img_raw_big.copy()
         #print("VISU SHAPE",visu.shape-)
         cell1Geometry = cellGeometry[1]
         for cell_1_index in range(tgrid.numberOfCells[1]):
@@ -636,12 +637,13 @@ class Predictor(object):
             if True:#arg3[u]!=arg3[v]:
                 coordiantes = cell1Geometry[cell_1_index].__array__()
                 #print(coordiantes.shape)
-                c0 = int(255.0 * p0 + 0.5)
-                c1 = int(255.0 * p1 + 0.5)
+                c0 = float(p0)
+                c1 = float(p1)
                 visu[coordiantes[:,0], coordiantes[:,1], :] = c0,c1,0 
 
-
-
+        # pylab.imshow(visu)
+        # pylab.show()
+        print("a8")
 
 
 
@@ -675,8 +677,9 @@ class Predictor(object):
             ri_img += nifty.ground_truth.RandError(gt, res_small).index
 
         vi_img /= n_seg
-        ri_img /= n_seg
+        ri_img /= n_seg 
 
+        print("a9")
 
         beta = 0.5
 
@@ -706,73 +709,6 @@ class Predictor(object):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-        # img_small = vigra.sampling.resize(vigra.taggedView(img_raw,'xyc'), seg.shape)
-        # ol = nifty.segmentation.segmentOverlay(image=img_small, segmentation=seg, beta=0.24)
-        # pylab.imshow(numpy.swapaxes(ol, 0,1))
-        # pylab.show()
-
-        # cell1Geometry = cellGeometry[1]
-        # for cell_1_index in range(tgrid.numberOfCells[1]):
-
-        #     p1 = cell_1_preds_combined[cell_1_index]
-        #     p0 = 1.0 - 0-p1
-
-        #     u,v = cell_1_bounds[cell_1_index, :]
-
-        #     if True:#arg3[u]!=arg3[v]:
-        #         coordiantes = cell1Geometry[cell_1_index].__array__()
-        #         #print(coordiantes.shape)
-        #         c0 = int(255.0 * p0 + 0.5)
-        #         c1 = int(255.0 * p1 + 0.5)
-        #         visu[coordiantes[:,0], coordiantes[:,1], :] = c0,c1,0 
-
-        # vigra.imshow(visu)
-        # vigra.show()
-
-
-
-
-    def predict_bra(self, index):
-
-
-        res_odict, backward_mapping, cell1_preds, cell0_3_preds, lifted_preds = self.predict_augmented(index)
-        cell_1_bounds  = res_odict["cell_1_bounds"]
-        sp  = res_odict["sp"]
-
-        res_odict2, backward_mapping2, cell1_preds2, cell0_3_preds2, lifted_preds2 = self.predict_augmented(index, tt_augment=True)
-        cell_1_bounds2 = res_odict2["cell_1_bounds"]
-        sp2  = res_odict["sp"]
-
-        import nifty.ground_truth
-        assert sp.min() == 1
-        assert sp2.min() == 1
-        overlap = nifty.ground_truth.overlap(segmentation=sp, groundTruth=sp2)
-
-        assert cell1_preds2.min()>=0.0
-        assert cell1_preds2.max()<=1.0
-        assert cell_1_bounds2.shape[0] == cell1_preds2.shape[0]
-        aug_cell1_preds = overlap.transferCutProbabilities(
-            cell_1_bounds,
-            cell1_preds,
-            cell_1_bounds2,
-            cell1_preds2
-        )
-        diff = aug_cell1_preds - cell1_preds
-        for cell_1_index in range(aug_cell1_preds.shape[0]):
-            if numpy.abs(diff[cell_1_index] > 0.1):
-                print(cell1_preds[cell_1_index], aug_cell1_preds[cell_1_index], diff[cell_1_index])
 
     def run(self, img, preds, tgrid, overseg, cell_1_bounds, cell_1_sizes, image_number, gt_stack):
 

@@ -35,6 +35,7 @@ from predictor import *
 
 def main():
 
+    laptop = True
 
     class LossWrapper(nn.Module):
         def __init__(self):
@@ -59,9 +60,14 @@ def main():
 
 
     # Fill these in:
-    LOG_DIRECTORY = '/home/tbeier/src/extension-cpp/log/'
-    SAVE_DIRECTORY = '/home/tbeier/src/extension-cpp/savedir_new/'
-    RES_DIRECTORY = '/home/tbeier/src/extension-cpp/res_newtrain_realnew/'
+    if laptop:
+        LOG_DIRECTORY = '/home/tbeier/src/extension-cpp/log/'
+        SAVE_DIRECTORY = '/home/tbeier/src/extension-cpp/savedir_new/'
+        RES_DIRECTORY = '/home/tbeier/src/extension-cpp/danu/'
+    else:
+        LOG_DIRECTORY = '/export/home/tbeier/src/extension-cpp/log/'
+        SAVE_DIRECTORY = '/export/home/tbeier/src/extension-cpp/savedir_new/'
+        RES_DIRECTORY = '/export/home/tbeier/src/extension-cpp/danu/'
     USE_CUDA = bool(1)
 
     # Device configuration
@@ -124,7 +130,7 @@ def main():
     count = 0
 
 
-    for i in range(0, 200):
+    for i in range(7, 200):
 
 
         predictor = Predictor(model=meval, ds=bsd_test, output_folder=RES_DIRECTORY)

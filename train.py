@@ -120,7 +120,7 @@ if __name__ == '__main__':
     trainer.validate_every((1, 'epochs'))
     #trainer.save_every((4, 'epochs'))
     trainer.save_to_directory(SAVE_DIRECTORY)
-    trainer.set_max_num_epochs(10000) 
+    trainer.set_max_num_epochs(200) 
     trainer.register_callback(SaveAtBestValidationScore(smoothness=smoothness, verbose=True))
     trainer.register_callback(AutoLR(factor=0.5,
                                   patience='1 epochs',
@@ -140,12 +140,13 @@ if __name__ == '__main__':
 
     num_inputs = bsd_train.num_inputs()
     num_targets = bsd_train.num_targets()
+
+
+    #trainer.load()
     trainer\
       .bind_loader('train',    train_loader, num_inputs=num_inputs, num_targets=num_targets) \
       .bind_loader('validate', val_loader,   num_inputs=num_inputs, num_targets=num_targets) \
 
-
-
     trainer.cuda()
-    #Etrainer.load()
+    #E
     trainer.fit()

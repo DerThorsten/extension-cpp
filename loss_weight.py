@@ -17,6 +17,10 @@ def get_cell_1_loss_weight(targets, sizes=None, sqrt_sizes=False):
     prio0 = prio0 / normalization
     prio1 = prio1 / normalization
 
+    
+
+    
+    
 
 
     #prio0 = (targets<0.5).sum() / n_targets
@@ -30,7 +34,7 @@ def get_cell_1_loss_weight(targets, sizes=None, sqrt_sizes=False):
 
 
     # from the fact that whe have unbalanced class set
-    weight_target    = (1.0 - targets)*reciprocal_prio0 + targets*reciprocal_prio1
+    weight_target    = (1.0 - targets)*reciprocal_prio0 + (targets*reciprocal_prio1)*10.0
     
     weight_certainty = (certainty + 1.0)**2
 
