@@ -64,10 +64,16 @@ def main():
         LOG_DIRECTORY = '/home/tbeier/src/extension-cpp/log/'
         SAVE_DIRECTORY = '/home/tbeier/src/extension-cpp/savedir_new/'
         RES_DIRECTORY = '/home/tbeier/src/extension-cpp/danu/'
+        pmap_root = "/home/tbeier/src/holy-edge/hed-data/out/"
+        bsd_root = "/home/tbeier/datasets/BSR/BSDS500/"
+
     else:
         LOG_DIRECTORY = '/export/home/tbeier/src/extension-cpp/log/'
         SAVE_DIRECTORY = '/export/home/tbeier/src/extension-cpp/savedir_new/'
         RES_DIRECTORY = '/export/home/tbeier/src/extension-cpp/danu/'
+        pmap_root = "/export/home/tbeier/bsd500_HED/"
+        bsd_root = "/home/tbeier/dataset/BSR/BSDS500/"
+
     USE_CUDA = bool(1)
 
     # Device configuration
@@ -78,8 +84,7 @@ def main():
     #transforms = transforms.Compose([transforms.CenterCrop(100), transforms.ToTensor()])
 
 
-    bsd_root = "/home/tbeier/datasets/BSR/BSDS500/"
-    pmap_root = "/home/tbeier/src/holy-edge/hed-data/out"
+
     #split = "train"
 
 
