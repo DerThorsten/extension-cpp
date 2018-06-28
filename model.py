@@ -31,10 +31,10 @@ from cpp.spacc import *
 
 
 class LossWrapper(nn.Module):
-    def __init__(self):
+    def __init__(self, p0, p1):
         super(LossWrapper, self).__init__()
         #self.loss = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.5, 2.0]), reduce=False)
-        self.cell1_loss = torch.nn.BCELoss(reduce=False)
+        self.cell1_loss = torch.nn.CrossEntropyLoss(reduce=False, weight=torch.tensor([1.0/p0, 1.0/p1]).float())
 
 
     def forward(self,thepred, all_gt):
@@ -51,7 +51,7 @@ class LossWrapper(nn.Module):
         # CELL 1 / BOUNDARY LOSS
         ############################
         lc1 =  self.cell1_loss(cell_1_prediction, cell_1_gt)
-        lc1 = torch.sum(lc1 * cell_1_lw)/cell_1_prediction.size(0)
+        lc1 = torch.sum(lc1.double() * cell_1_lw.double())/cell_1_prediction.size(0)
 
 
 
@@ -375,7 +375,7 @@ class ConvNet(nn.Module):
         self.lifted_edge_pred = MyNN(in_channels=self.lifted_edges_op.out_channels,
                               out_channels=1, activated=False)
 
-        self.hidden_3    = nn.Linear(self.edge_hidden.out_channels, 1)
+        self.hidden_3    = nn.Linear(self.edge_hidden.out_channels, 2)
 
         self.sigmoid     = nn.Sigmoid()
         self.softmax     = nn.Softmax(dim=1)
@@ -464,7 +464,7 @@ class ConvNet(nn.Module):
 
 
         cell_1_pred = self.hidden_3(cell_1_feat)
-        cell_1_pred = self.sigmoid(cell_1_pred)
+        cell_1_pred = self.softmax(cell_1_pred)
 
         if False:
             # extract the j represenation

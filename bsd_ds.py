@@ -182,7 +182,20 @@ class Bsd500Sp(Dataset):
         return cell_masks
 
 
-    def getitemimpl(self, index, tt_augment=False, return_test_data=False, sp=None):
+    def get_class_p(self):
+        c0 = 0.0
+        c1 = 0.0
+        for i in range(0,200, 10):
+            r =self.getitemimpl(index=i, estimate_class_p=True)
+            c0 += r[0]
+            c1 += r[1]
+
+        n = c0 + c1
+        return c0/n, c1/n
+
+
+
+    def getitemimpl(self, index, tt_augment=False, return_test_data=False, sp=None, estimate_class_p=False):
 
 
 
@@ -299,6 +312,12 @@ class Bsd500Sp(Dataset):
             sp=sp,
             gt_stack=gt_stack,
             cell_1_sizes=cell_1_sizes)
+
+        if estimate_class_p:
+            c0 = len(numpy.where(cell_1_gt<0.5)[0])
+            c1 = len(numpy.where(cell_1_gt>=0.5)[0])
+
+            return c0,c1
     
         #assert lifted_edge_gt.min()>=0.0
         #assert lifted_edge_gt.max()<=1.0
@@ -416,7 +435,7 @@ class Bsd500Sp(Dataset):
         #assert cell0_3_gt.ndim == 1
         #assert cell0_4_gt.ndim == 1
 
-        return_dict["cell_1_gt"] = torch.from_numpy(cell_1_gt)
+        return_dict["cell_1_gt"] = torch.from_numpy(cell_1_gt).long()
         return_dict["cell_1_loss_weight"] = torch.from_numpy(cell_1_loss_weight)
         #return_dict["cell0_3_gt"] = torch.from_numpy(cell0_3_gt).long()
         #return_dict["cell0_4_gt"] = torch.from_numpy(cell0_4_gt).long()

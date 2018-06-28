@@ -2,52 +2,54 @@ import numpy
 
 def get_cell_1_loss_weight(targets, sizes=None, sqrt_sizes=False):
 
+    assert sizes is not None
+    return sizes.astype('float')**0.5
     # get certainty from targets
-    # => how far are we away from 0.5
-    # [0,1]
-    certainty = 4.0 * (targets - 0.5)**2
+    # # => how far are we away from 0.5
+    # # [0,1]
+    # certainty = 4.0 * (targets - 0.5)**2
 
-    # compute class frequencies
-    n_targets = len(targets)
+    # # compute class frequencies
+    # n_targets = len(targets)
 
 
-    prio0 = (targets[numpy.where(targets >  0.5)]).sum()
-    prio1 = (targets[numpy.where(targets <= 0.5)]).sum()
-    normalization = prio0 + prio1
-    prio0 = prio0 / normalization
-    prio1 = prio1 / normalization
-
-    
+    # prio0 = (targets[numpy.where(targets >  0.5)]).sum()
+    # prio1 = (targets[numpy.where(targets <= 0.5)]).sum()
+    # normalization = prio0 + prio1
+    # prio0 = prio0 / normalization
+    # prio1 = prio1 / normalization
 
     
+
+    
     
 
 
-    #prio0 = (targets<0.5).sum() / n_targets
-    #prio1 = 1.0 - prio0
+    # #prio0 = (targets<0.5).sum() / n_targets
+    # #prio1 = 1.0 - prio0
 
-    prio0 = numpy.clip(prio0, 0.0001,0.9999)
-    prio1 = numpy.clip(prio1, 0.0001,0.9999)
+    # prio0 = numpy.clip(prio0, 0.0001,0.9999)
+    # prio1 = numpy.clip(prio1, 0.0001,0.9999)
 
-    reciprocal_prio0 = 1.0 / prio0
-    reciprocal_prio1 = 1.0 / prio1
+    # reciprocal_prio0 = 1.0 / prio0
+    # reciprocal_prio1 = 1.0 / prio1
 
 
-    # from the fact that whe have unbalanced class set
-    weight_target    = (1.0 - targets)*reciprocal_prio0 + (targets*reciprocal_prio1)*12.0
+    # # from the fact that whe have unbalanced class set
+    # weight_target    = (1.0 - targets)*reciprocal_prio0 + (targets*reciprocal_prio1)*12.0
     
-    weight_certainty = (certainty + 1.0)**2
+    # weight_certainty = (certainty + 1.0)**2
 
-    if sizes is not None:
-        # total weight
-        weight_sizes     = numpy.require(sizes, dtype='float')
-        if sqrt_sizes:
-            weight_sizes = numpy.sqrt(weight_sizes) 
-        ret = weight_target * weight_sizes * weight_certainty
-    else:
-        ret = weight_target * weight_certainty
+    # if sizes is not None:
+    #     # total weight
+    #     weight_sizes     = numpy.require(sizes, dtype='float')
+    #     if sqrt_sizes:
+    #         weight_sizes = numpy.sqrt(weight_sizes) 
+    #     ret = weight_target * weight_sizes * weight_certainty
+    # else:
+    #     ret = weight_target * weight_certainty
 
-    return numpy.require(ret, dtype='float32')
+    # return numpy.require(ret, dtype='float32')
 
 
 def make_cell_0_gt(cell_bounds, cell_1_gt, jsize):

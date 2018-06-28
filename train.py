@@ -101,11 +101,20 @@ if __name__ == '__main__':
         split='train', 
         joint_transformation=joint_transformation)
 
+    if False:
+        p0,p1 = bsd_train.get_class_p()
+    else:
+        p0,p1 = (0.8358901383682725, 0.16410986163172753)
+
+    print("class p ", p0,p1)
+
     bsd_val = Bsd500Sp(
         bsd_root=bsd_root, 
         pmap_root=pmap_root,
         split='val', 
         joint_transformation=joint_transformation)
+
+
 
     model = ConvNet()#.double()
 
@@ -114,8 +123,7 @@ if __name__ == '__main__':
 
 
 
-    trainer.build_criterion(LossWrapper)
-    trainer.build_criterion(LossWrapper)
+    trainer.build_criterion(LossWrapper(p0=p0, p1=p1))
     trainer.build_optimizer('Adam')
     trainer.validate_every((1, 'epochs'))
     #trainer.save_every((4, 'epochs'))
