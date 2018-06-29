@@ -66,13 +66,13 @@ if __name__ == '__main__':
         bsd_root = "/export/home/tbeier/dataset/BSR/BSDS500/"
         pmap_root = "/export/home/tbeier/bsd500_HED/"
         LOG_DIRECTORY = '/export/home/tbeier/src/extension-cpp/log_new/'
-        SAVE_DIRECTORY = '/export/home/tbeier/src/extension-cpp/savedir_new/'
+        SAVE_DIRECTORY = '/export/home/tbeier/src/extension-cpp/save_fewer/'
 
     else:
         bsd_root = "/home/tbeier/datasets/BSR/BSDS500/"
         pmap_root = "/home/tbeier/src/holy-edge/hed-data/out/"
         LOG_DIRECTORY = '/home/tbeier/src/extension-cpp/log_new/'
-        SAVE_DIRECTORY = '/home/tbeier/src/extension-cpp/savedir_new/'
+        SAVE_DIRECTORY = '/home/tbeier/src/extension-cpp/save_fewer/'
 
     split = "train"
 
@@ -101,10 +101,10 @@ if __name__ == '__main__':
         split='train', 
         joint_transformation=joint_transformation)
 
-    if False:
+    if True:
         p0,p1 = bsd_train.get_class_p()
     else:
-        p0,p1 = (0.8358901383682725, 0.16410986163172753)
+        p0,p1 = (0.86, 0.14)
 
     print("class p ", p0,p1)
 
@@ -124,7 +124,7 @@ if __name__ == '__main__':
 
 
     trainer.build_criterion(LossWrapper(p0=p0, p1=p1))
-    trainer.build_optimizer('Adam')
+    trainer.build_optimizer('Adam')#, lr=0.0001)
     trainer.validate_every((1, 'epochs'))
     #trainer.save_every((4, 'epochs'))
     trainer.save_to_directory(SAVE_DIRECTORY)
@@ -150,7 +150,7 @@ if __name__ == '__main__':
     num_targets = bsd_train.num_targets()
 
 
-    #trainer.load()
+    trainer.load()
     trainer\
       .bind_loader('train',    train_loader, num_inputs=num_inputs, num_targets=num_targets) \
       .bind_loader('validate', val_loader,   num_inputs=num_inputs, num_targets=num_targets) \

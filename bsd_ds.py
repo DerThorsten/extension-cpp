@@ -127,22 +127,23 @@ class Bsd500Sp(Dataset):
         return tuple(res)
 
 
-    def make_cell_1_gt(self, tgrid, sp, cell_1_bounds, gt_stack, cell_1_sizes):
+    def make_hard_cell_1_gt(self, tgrid, sp, cell_1_bounds, gt_stack, cell_1_sizes):
         soft_cell_1_gt = numpy.zeros(tgrid.numberOfCells[1], dtype='float32')
         #soft_lifted_edge_gt = numpy.zeros(lifted_edges.shape[0], dtype='float32')
 
-        for i in range(gt_stack.shape[0]):
-            labels = gt_stack[i,...]
-            labels = numpy.require(labels.view(numpy.ndarray), requirements=['C'])
+        #for i in range(gt_stack.shape[0]):
+        i = numpy.random.randint(0, gt_stack.shape[0])
+        labels = gt_stack[i,...]
+        labels = numpy.require(labels.view(numpy.ndarray), requirements=['C'])
 
-            overlap = nifty.ground_truth.overlap(segmentation=sp, 
-                                           groundTruth=labels)
+        overlap = nifty.ground_truth.overlap(segmentation=sp, 
+                                       groundTruth=labels)
 
-            soft_cell_1_gt      += overlap.differentOverlaps(cell_1_bounds)
-            #soft_lifted_edge_gt += overlap.differentOverlaps(lifted_edges)
+        soft_cell_1_gt      += overlap.differentMaxOverlaps(cell_1_bounds).astype('int')
 
-        soft_cell_1_gt /= gt_stack.shape[0]
-        hard_gt = numpy.round(soft_cell_1_gt, 1)
+        #print("the gt_stack",gt_stack.shape)
+        #soft_cell_1_gt /= gt_stack.shape[0]
+        hard_gt = soft_cell_1_gt > 0.3
         #semi_hard_gt = 0.01*soft_cell_1_gt + 0.99*hard_gt
 
         #soft_lifted_edge_gt /= gt_stack.shape[0]
@@ -153,7 +154,7 @@ class Bsd500Sp(Dataset):
         #slv = cell_1_sizes[lifted_edges[:,1]-1]
         #lifted_edge_sizes = numpy.minimum(slu, slv)
 
-        return hard_gt,        get_cell_1_loss_weight(soft_cell_1_gt, sizes=cell_1_sizes)
+        return hard_gt.astype('int64'),        get_cell_1_loss_weight(soft_cell_1_gt, sizes=cell_1_sizes)
                #hard_lifted_edge_gt, get_cell_1_loss_weight(soft_lifted_edge_gt, sizes=lifted_edge_sizes)
 
     def make_cell_masks(self, tgrid):
@@ -306,16 +307,38 @@ class Bsd500Sp(Dataset):
         #print("make gt")
 
         # transform image level gt to cell1 (sp-boundaries) gt
-        cell_1_gt, cell_1_loss_weight = self.make_cell_1_gt(
+        cell_1_gt, cell_1_loss_weight = self.make_hard_cell_1_gt(
             tgrid=tgrid, 
             cell_1_bounds=cell_1_bounds,
             sp=sp,
             gt_stack=gt_stack,
             cell_1_sizes=cell_1_sizes)
 
+
+        if False:
+            visu = numpy.rollaxis(img_raw_big, 0,3)/255.0
+            #print("VISU SHAPE",visu.shape-)
+            cell1Geometry = cellGeometry[1]
+            print("thecell1",cell_1_gt.shape)
+            for cell_1_index in range(tgrid.numberOfCells[1]):
+
+              
+
+                u,v = cell_1_bounds[cell_1_index, :]
+
+                if cell_1_gt[cell_1_index] == True:
+                    coordiantes = cell1Geometry[cell_1_index].__array__()
+                    #print(coordiantes.shape)
+                    # c0 = float(p0)
+                    # c1 = float(p1)
+                    visu[coordiantes[:,0], coordiantes[:,1], :] = 1
+
+            pylab.imshow(visu)
+            pylab.show()
+
         if estimate_class_p:
-            c0 = len(numpy.where(cell_1_gt<0.5)[0])
-            c1 = len(numpy.where(cell_1_gt>=0.5)[0])
+            c0 = len(numpy.where(cell_1_gt==0)[0])
+            c1 = len(numpy.where(cell_1_gt==1)[0])
 
             return c0,c1
     
@@ -434,7 +457,8 @@ class Bsd500Sp(Dataset):
         ########################################
         #assert cell0_3_gt.ndim == 1
         #assert cell0_4_gt.ndim == 1
-
+        #for i in range(cell_1_gt.shape[0]):
+        #    print("thegt",cell_1_gt[i])
         return_dict["cell_1_gt"] = torch.from_numpy(cell_1_gt).long()
         return_dict["cell_1_loss_weight"] = torch.from_numpy(cell_1_loss_weight)
         #return_dict["cell0_3_gt"] = torch.from_numpy(cell0_3_gt).long()

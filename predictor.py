@@ -215,12 +215,22 @@ class Predictor(object):
             cell1_preds = self.model(
                 *tlist[0:self.ds.num_inputs()]
             )
+
+            #for i in range(10):
+            #    print(cell1_preds[i,:])
+            #rint("accc")
+            cell1_preds = torch.nn.functional.softmax(cell1_preds, dim=1)
+            #for i in range(10):
+            #    print(cell1_preds[i,:])
+
+
+            cell1_preds = cell1_preds[:,1]
             assert cell1_preds.min()>=0.0
             assert cell1_preds.max()<=1.0
             cell1_preds_list.append(to_numpy(cell1_preds))
             weights.append(weight)
 
-    
+            #sys.exit(1)
 
 
         cell1_preds = numpy.average(cell1_preds_list, weights=weights, axis=0).squeeze()
@@ -355,6 +365,282 @@ class Predictor(object):
         pylab.show()
 
       
+    def predict_mc(self, index):
+        res_odict, backward_mapping, cell1_preds = self.predict_augmented(index)
+   
+        cell_1_bounds   = res_odict["cell_1_bounds"]
+        sp              = res_odict["sp"]
+        tgrid           = res_odict["tgrid"]
+        img_raw         = res_odict["img_raw"]
+        sp              = res_odict["sp"]
+        image_number    = res_odict["image_number"]
+        gt_stack        = res_odict["gt_stack"]
+
+    
+
+
+
+
+
+
+
+        
+        ############################################
+        # DO STUFF WITH RESULTS!
+        #############################################
+        # for i in range(cell0_3_preds.shape[0]):
+        #     print("C03_%d"%i, cell0_3_preds[i,...])
+
+        # for i in range(lifted_preds.shape[0]):
+        #     if(lifted_preds[i] > 0.5):
+        #         print("lifted_preds%d"%i, lifted_preds[i])
+
+
+
+        img_raw = vigra.taggedView(img_raw, "xyc")
+        img_raw_big = vigra.sampling.resize(img_raw, [2*s-1 for s in img_raw.shape[0:2]])
+        img_raw_big/= img_raw_big.max()
+
+
+
+
+        # bounds
+        cell_bounds = tgrid.extractCellsBounds()
+        cell_0_bounds = cell_bounds[0].__array__().astype('int32')
+        cell_1_bounds = cell_bounds[1].__array__().astype('int32')
+
+
+
+        cellGeometry = tgrid.extractCellsGeometry()
+        cell_1_sizes  = cellGeometry[1].sizes().astype('int')
+        cell_2_sizes  = cellGeometry[2].sizes().astype('int')
+
+        cell1Geometry = cellGeometry[1]
+
+
+        cell_1_preds_wsum = numpy.zeros(tgrid.numberOfCells[1])
+        cell_1_preds_w    = numpy.zeros(tgrid.numberOfCells[1])
+
+        # from cell 1
+        for cell_1_index in range(tgrid.numberOfCells[1]):
+            p1 = cell1_preds[cell_1_index]
+            cell_1_preds_wsum[cell_1_index] += 1.0*p1
+            cell_1_preds_w[cell_1_index] += 1.0
+
+        # # from cell 0
+        # if True:
+        #     i3 = 0
+        #     for cell_0_index in range(tgrid.numberOfCells[0]):
+        #         bounds = cell_0_bounds[cell_0_index,:]
+        #         if bounds[3] == 0:
+        #             jsize = 3
+        #             bounds = bounds[0:3]
+        #             cell_0_pred = cell0_3_preds[i3]
+        #             #argmx = numpy.argmax(cell_0_pred)
+        #             #cell_1_pred = backward_mapping[argmx, ...]
+        #             cell_1_pred = convert_pred(cell_0_pred, backward_mapping)
+        #             i3 += 1
+                
+
+        #             cell_1_indices = bounds  - 1
+
+        #             for cell_1_index,p1 in zip(cell_1_indices, cell_1_pred):
+                        
+        #                 if jsize == 3:
+        #                     cell_1_preds_wsum[cell_1_index] += 0.45*p1
+        #                     cell_1_preds_w[cell_1_index] += 0.45
+        
+
+
+        print("cell1_preds", cell1_preds)
+        
+        if True:
+            # from normal edges
+            eps = 0.0001
+            p1 = numpy.clip(cell1_preds, eps, 1.0-eps)
+            p0 = 1.0 - p1 
+            b_local = 0.4
+            w_local = numpy.log(p0/p1) + numpy.log((1.0-b_local)/b_local)
+            w_local *= cell_1_sizes.astype('float')/cell_1_sizes.max()
+            w_local /= w_local.shape[0]
+
+
+
+         
+
+            lmc_graph = nifty.graph.undirectedGraph(cell_1_bounds.max() + 1)
+            lmc_graph.insertEdges(cell_1_bounds)
+            #lmc_graph.insertEdges(lifted_edges)
+
+
+
+          
+
+           
+            #uv = rag.uvIds()
+
+
+            lmc_graph.insertEdges(cell_1_bounds)
+            lmc_graph_w = numpy.zeros(lmc_graph.numberOfEdges)
+            lmc_graph_w[lmc_graph.findEdges(cell_1_bounds)] = w_local
+   
+
+            graph = lmc_graph
+
+            MulticutObjective = lmc_graph.__class__.MulticutObjective
+            solverFactory = MulticutObjective.multicutIlpCplexFactory()
+            objective = MulticutObjective(lmc_graph, lmc_graph_w)
+
+            loggingVisitor = MulticutObjective.verboseVisitor(visitNth=1)
+            solver = solverFactory.create(objective)
+            result_mc = solver.optimize(loggingVisitor)
+
+            result_mc = nifty.graph.connectedComponentsFromNodeLabels(graph, result_mc)
+
+       
+
+
+
+            seg = numpy.take(result_mc.astype('int'), sp.astype('int')).astype('uint64')
+
+            img_small = vigra.sampling.resize(vigra.taggedView(img_raw,'xyc'), seg.shape)
+
+            # pylab.imshow(numpy.swapaxes(ol, 0,1))
+            # pylab.show()
+
+
+
+
+
+
+
+
+
+
+            # and again
+            # make the Region adjacency graph (RAG)
+            rag = nifty.graph.rag.gridRag(seg.astype('uint64'))
+            gradmag = vigra.filters.gaussianGradientMagnitude(img_raw, 1.0).squeeze().view(numpy.ndarray)
+            gradmag = numpy.require(gradmag, requirements=['C'])
+            edge_features, node_features = nifty.graph.rag.accumulateMeanAndLength(
+                rag, gradmag, [10,10],1)
+            meanEdgeStrength = edge_features[:,0]
+            edgeSizes = edge_features[:,1]
+            nodeSizes = node_features[:,1]
+
+            print("a6")
+            print("rag",rag)
+            print("nodeSizes.shape",nodeSizes.shape)
+            print("meanEdgeStrength.shape",meanEdgeStrength.shape)
+
+            minimumNodeSize = int(15**2)
+            # print("minimumNodeSize",minimumNodeSize)
+            # cluster-policy  
+            nodeSeg = nifty.graph.agglo.sizeLimitClustering(
+                graph=rag, nodeSizes=nodeSizes, edgeIndicators=meanEdgeStrength,
+                edgeSizes=edgeSizes, sizeRegularizer=0.8,
+                minimumNodeSize=minimumNodeSize)
+            print("a6b")
+            #gglomerativeClustering = nifty.graph.agglo.agglomerativeClustering(clusterPolicy) 
+            #gglomerativeClustering.run(verbose=0, printNth=0)
+            #odeSeg = agglomerativeClustering.result()
+
+            # convert graph segmentation
+            # to pixel segmentation
+            seg = nifty.graph.rag.projectScalarNodeDataToPixels(rag, nodeSeg)
+
+            print("a7")
+
+
+        ol = nifty.segmentation.segmentOverlay(image=img_small, segmentation=seg, beta=0.24)
+
+
+        img_small = vigra.sampling.resize(vigra.taggedView(img_raw,'xyc'), sp.shape)
+        #ol = nifty.segmentation.segmentOverlay(image=img_small, segmentation=seg, beta=0.24)
+        # pylab.imshow(numpy.swapaxes(ol, 0,1))
+        # pylab.show()
+        visu = img_raw_big.copy()
+        #print("VISU SHAPE",visu.shape-)
+        cell1Geometry = cellGeometry[1]
+        for cell_1_index in range(tgrid.numberOfCells[1]):
+
+            p1 = cell1_preds[cell_1_index]
+            p0 = 1.0 - 0-p1
+
+            u,v = cell_1_bounds[cell_1_index, :]
+
+            if True:#arg3[u]!=arg3[v]:
+                coordiantes = cell1Geometry[cell_1_index].__array__()
+                #print(coordiantes.shape)
+                c0 = float(p0)
+                c1 = float(p1)
+                visu[coordiantes[:,0], coordiantes[:,1], :] = c0,c1,0 
+
+        # pylab.imshow(visu)
+        # pylab.show()
+        # print("a8")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        res_small = seg
+
+        vi_img = 0.0
+        ri_img = 0.0
+        n_seg =gt_stack.shape[0]
+
+        for i in range(n_seg):
+
+            gt = gt_stack[i,...]
+            gt = numpy.require(gt, requirements=['C'])
+            res_small = numpy.require(res_small, requirements=['C'])
+            vi_img += nifty.ground_truth.VariationOfInformation(gt, res_small).value
+
+            ri_img += nifty.ground_truth.RandError(gt, res_small).index
+
+        vi_img /= n_seg
+        ri_img /= n_seg 
+
+        print("a9")
+
+        beta = 0.5
+
+        # save seg
+        filename = os.path.join(self.out_dir,"%s_b%f_seg.h5"%(image_number,beta))
+        f = h5py.File(filename, 'w')
+        f['data'] = res_small
+        f['scores'] = numpy.array([vi_img, ri_img])
+        f.close()
+
+        # save visu
+        filename = os.path.join(self.out_dir,"%s_b%f_visu.png"%(image_number,beta))
+        vigra.impex.writeImage(ol, filename)
+
+
+        # save visu
+        filename = os.path.join(self.out_dir,"%s_overlay.png"%(image_number))
+        vigra.impex.writeImage(visu, filename)
+
+        return  vi_img, ri_img
+
+
+
+
+
+      
     def predict_lmc(self, index):
         res_odict, backward_mapping, cell1_preds, lifted_preds = self.predict_sp_augmented(index)
    
@@ -475,7 +761,7 @@ class Predictor(object):
             ls = numpy.minimum(su,sv).astype('float')
             w_lifted *= (ls/ls.max())
             w_lifted /= w_lifted.shape[0]
-            w_lifted *= 0.5
+            w_lifted *= 0.1
             
             if lifted_distances is not None:
                 w_lifted /= (lifted_distances.astype('float') + 1.0)**2
@@ -500,14 +786,16 @@ class Predictor(object):
 
           
 
-            lmc_graph_w = numpy.zeros(lmc_graph.numberOfEdges)
+           
             #uv = rag.uvIds()
 
 
             where_neg = numpy.where(w_lifted < 0.0)[0]
             w_neg = w_lifted[where_neg]
             lifted_edges_neg = lifted_edges[where_neg,:]
+            lmc_graph.insertEdges(lifted_edges_neg)
 
+            lmc_graph_w = numpy.zeros(lmc_graph.numberOfEdges)
             lmc_graph_w[lmc_graph.findEdges(cell_1_bounds)] = w_local
             lmc_graph_w[lmc_graph.findEdges(lifted_edges_neg)] = w_neg
 
@@ -524,23 +812,20 @@ class Predictor(object):
 
             result_mc = nifty.graph.connectedComponentsFromNodeLabels(graph, result_mc)
 
-            print("a1")
-
+       
 
 
 
             obj_lmc = nifty.graph.lifted_multicut.liftedMulticutObjective(graph)
 
-            print("a2")
+  
 
             obj_lmc.setCosts(cell_1_bounds, w_local)
 
-            print("a2b")
+ 
 
             obj_lmc.setCosts(lifted_edges, w_lifted)
 
-
-            print("a3")
 
 
             # solverFactory = obj_lmc.liftedMulticutGreedyAdditiveFactory()
@@ -569,7 +854,7 @@ class Predictor(object):
             seg = numpy.take(arg3.astype('int'), sp.astype('int')).astype('uint64')
 
             img_small = vigra.sampling.resize(vigra.taggedView(img_raw,'xyc'), seg.shape)
-            ol = nifty.segmentation.segmentOverlay(image=img_small, segmentation=seg, beta=0.24)
+
             # pylab.imshow(numpy.swapaxes(ol, 0,1))
             # pylab.show()
 
@@ -617,7 +902,7 @@ class Predictor(object):
             print("a7")
 
 
-
+        ol = nifty.segmentation.segmentOverlay(image=img_small, segmentation=seg, beta=0.24)
 
 
         img_small = vigra.sampling.resize(vigra.taggedView(img_raw,'xyc'), sp.shape)
@@ -643,7 +928,7 @@ class Predictor(object):
 
         # pylab.imshow(visu)
         # pylab.show()
-        print("a8")
+        # print("a8")
 
 
 
@@ -700,9 +985,6 @@ class Predictor(object):
         vigra.impex.writeImage(visu, filename)
 
         return  vi_img, ri_img
-
-
-
 
 
 

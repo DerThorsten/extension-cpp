@@ -135,13 +135,13 @@ def main():
     count = 0
 
 
-    for i in range(7, 200):
+    for i in range(0, 200):
 
 
         predictor = Predictor(model=meval, ds=bsd_test, output_folder=RES_DIRECTORY)
 
         
-        vi_img,ri_img = predictor.predict_lmc(i)
+        vi_img,ri_img = predictor.predict_mc(i)
 
         acc_vi_ds += vi_img
         acc_ri_ds += ri_img

@@ -125,7 +125,7 @@ def bsd_sp(img_rgb_in, pmap, n_sp=500, train=False, tt_augment=False):
     nodeSizes = node_features[:,1]
 
 
-    sizeRegularizer = augrand(0.85, sigma=0.02, range=[0.20, 1.0])
+    sizeRegularizer = augrand(0.80, sigma=0.02, range=[0.20, 1.0])
     #print("sizeRegularizer",sizeRegularizer)
     #sizeRegularizer = 0.25
     if tt_augment:

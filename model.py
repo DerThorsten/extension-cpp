@@ -50,7 +50,7 @@ class LossWrapper(nn.Module):
         ############################
         # CELL 1 / BOUNDARY LOSS
         ############################
-        lc1 =  self.cell1_loss(cell_1_prediction, cell_1_gt)
+        lc1 = self.cell1_loss(cell_1_prediction, cell_1_gt)
         lc1 = torch.sum(lc1.double() * cell_1_lw.double())/cell_1_prediction.size(0)
 
 
@@ -464,7 +464,7 @@ class ConvNet(nn.Module):
 
 
         cell_1_pred = self.hidden_3(cell_1_feat)
-        cell_1_pred = self.softmax(cell_1_pred)
+        #cell_1_pred = self.softmax(cell_1_pred)
 
         if False:
             # extract the j represenation
